@@ -1,7 +1,7 @@
 """再生制御の統合テスト（ボタン操作・UI状態確認）。"""
 from PyQt6.QtCore import Qt
 from pytestqt.qtbot import QtBot
-from main import VideoPlayer
+from looplayer.player import VideoPlayer
 
 
 def test_initial_state(player: VideoPlayer):
