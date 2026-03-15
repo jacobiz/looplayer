@@ -11,7 +11,16 @@ Auto-generated from all feature plans. Last updated: 2026-03-15
 ## Project Structure
 
 ```text
-main.py
+looplayer/              # アプリパッケージ
+├── __init__.py
+├── bookmark_store.py   # LoopBookmark + BookmarkStore（JSON永続化）
+├── sequential.py       # SequentialPlayState（連続再生状態管理）
+├── utils.py            # _ms_to_str ユーティリティ
+├── widgets/
+│   ├── bookmark_row.py    # BookmarkRow ウィジェット
+│   └── bookmark_panel.py  # BookmarkPanel ウィジェット
+└── player.py           # VideoPlayer + main()
+main.py                 # エントリーポイント
 tests/
 ├── unit/
 └── integration/

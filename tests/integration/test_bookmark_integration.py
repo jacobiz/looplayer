@@ -9,7 +9,7 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from bookmark_store import BookmarkStore, LoopBookmark
+from looplayer.bookmark_store import BookmarkStore, LoopBookmark
 
 
 VIDEO = "/home/user/test_video.mp4"
@@ -69,7 +69,7 @@ class TestUS2SequentialPlayFlow:
     """US2 統合テスト: 連続再生開始→複数区間の自動遷移→停止フロー。"""
 
     def test_連続再生で複数区間が順番に再生される(self):
-        from main import SequentialPlayState
+        from looplayer.sequential import SequentialPlayState
         bms = [
             LoopBookmark(point_a_ms=0, point_b_ms=1000, name="A"),
             LoopBookmark(point_a_ms=2000, point_b_ms=3000, name="B"),
@@ -86,7 +86,7 @@ class TestUS2SequentialPlayFlow:
         assert state.current_bookmark.name == "C"
 
     def test_最終区間後は先頭に戻る(self):
-        from main import SequentialPlayState
+        from looplayer.sequential import SequentialPlayState
         bms = [
             LoopBookmark(point_a_ms=0, point_b_ms=1000, name="A"),
             LoopBookmark(point_a_ms=2000, point_b_ms=3000, name="B"),
@@ -100,7 +100,7 @@ class TestUS2SequentialPlayFlow:
         assert state.current_bookmark.name == "A"
 
     def test_停止操作でactiveがFalseになる(self):
-        from main import SequentialPlayState
+        from looplayer.sequential import SequentialPlayState
         bms = [LoopBookmark(point_a_ms=0, point_b_ms=1000, name="A")]
         bms[0].order = 0
         state = SequentialPlayState(bookmarks=bms)

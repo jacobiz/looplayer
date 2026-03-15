@@ -1,6 +1,6 @@
 import pytest
 from pytestqt.qtbot import QtBot
-from main import VideoPlayer
+from looplayer.player import VideoPlayer
 
 
 @pytest.fixture

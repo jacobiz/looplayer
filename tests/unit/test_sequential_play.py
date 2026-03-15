@@ -2,13 +2,11 @@
 SequentialPlayState の状態遷移ロジック単体テスト
 """
 import pytest
-from bookmark_store import LoopBookmark
+from looplayer.bookmark_store import LoopBookmark
 
 
-# ── SequentialPlayState はまだ main.py に実装される予定のため
-#    テスト実行時はインポートを遅延させる
 def _import_state():
-    from main import SequentialPlayState
+    from looplayer.sequential import SequentialPlayState
     return SequentialPlayState
 
 

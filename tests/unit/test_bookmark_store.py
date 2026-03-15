@@ -5,7 +5,7 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from bookmark_store import BookmarkStore, LoopBookmark
+from looplayer.bookmark_store import BookmarkStore, LoopBookmark
 
 
 # ── LoopBookmark テスト ───────────────────────────────────────

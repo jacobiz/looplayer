@@ -1,6 +1,6 @@
 """_ms_to_str ヘルパー関数のユニットテスト。"""
 import pytest
-from main import _ms_to_str
+from looplayer.utils import _ms_to_str
 
 
 @pytest.mark.parametrize("ms, expected", [

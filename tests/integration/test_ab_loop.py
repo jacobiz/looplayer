@@ -1,6 +1,6 @@
 """ABループ操作フローの統合テスト。"""
 from unittest.mock import patch
-from main import VideoPlayer
+from looplayer.player import VideoPlayer
 
 
 def test_set_point_a_calls_method_and_updates_ui(player: VideoPlayer):
@@ -72,7 +72,7 @@ def test_new_file_resets_ab_state(player: VideoPlayer):
     player.toggle_ab_loop(True)
 
     # ファイルダイアログ・VLC操作をモックして open_file() を実行
-    with patch("main.QFileDialog.getOpenFileName", return_value=("/fake/video.mp4", "")):
+    with patch("looplayer.player.QFileDialog.getOpenFileName", return_value=("/fake/video.mp4", "")):
         with patch.object(player.instance, 'media_new', return_value=object()):
             with patch.object(player.media_player, 'set_media'):
                 with patch.object(player.media_player, 'set_xwindow'):

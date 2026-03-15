@@ -1,6 +1,6 @@
 """ABループ判定ロジックのユニットテスト。"""
 from unittest.mock import patch
-from main import VideoPlayer
+from looplayer.player import VideoPlayer
 
 
 def test_loop_does_not_trigger_without_b(player: VideoPlayer):
