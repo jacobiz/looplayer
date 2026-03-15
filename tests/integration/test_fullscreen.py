@@ -58,18 +58,15 @@ class TestEscapeExitsFullscreen:
         player.toggle_fullscreen()
         assert player.isFullScreen()
         # Escape アクションを直接トリガー（ApplicationShortcut は QTest.keyClick では動作しない）
-        esc_action = next(
-            (a for a in player.menuBar().actions()
-             if a.menu() and any(sub.shortcut().toString() == "Escape"
-                                 for sub in a.menu().actions())),
-            None
-        )
-        if esc_action:
-            sub = next(a for a in esc_action.menu().actions()
-                       if a.shortcut().toString() == "Escape")
-            sub.trigger()
-        else:
-            player._exit_fullscreen()
+        esc_action = None
+        for menu_action in player.menuBar().actions():
+            if menu_action.menu():
+                for sub in menu_action.menu().actions():
+                    if sub.shortcut().toString() in ("Esc", "Escape"):
+                        esc_action = sub
+                        break
+        assert esc_action is not None, "Esc ショートカットが表示メニューに存在しない"
+        esc_action.trigger()
         assert not player.isFullScreen()
 
 

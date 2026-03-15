@@ -370,6 +370,7 @@ class VideoPlayer(QMainWindow):
 
     def _set_volume(self, v: int):
         """音量を設定する（0〜100 クランプ・スライダー同期・VLC 反映）。"""
+        self._is_muted = False
         self._volume = max(0, min(v, 100))
         self.volume_slider.blockSignals(True)
         self.volume_slider.setValue(self._volume)
@@ -448,8 +449,12 @@ class VideoPlayer(QMainWindow):
             flags |= Qt.WindowType.WindowStaysOnTopHint
         else:
             flags &= ~Qt.WindowType.WindowStaysOnTopHint
+        was_fullscreen = self.isFullScreen()
         self.setWindowFlags(flags)
-        self.show()
+        if was_fullscreen:
+            self.showFullScreen()
+        else:
+            self.show()
         self.always_on_top_action.setChecked(self._always_on_top)
 
     # ── AB ループ操作 ─────────────────────────────────────────
