@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libdbus-1-3 \
+    fonts-noto-cjk \
     git \
     curl \
     gnupg \
