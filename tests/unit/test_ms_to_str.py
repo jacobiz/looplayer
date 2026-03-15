@@ -1,6 +1,6 @@
 """_ms_to_str ヘルパー関数のユニットテスト。"""
 import pytest
-from looplayer.utils import _ms_to_str
+from looplayer.utils import ms_to_str
 
 
 @pytest.mark.parametrize("ms, expected", [
@@ -15,4 +15,4 @@ from looplayer.utils import _ms_to_str
     (3661000, "01:01:01"), # 1時間1分1秒
 ])
 def test_ms_to_str(ms, expected):
-    assert _ms_to_str(ms) == expected
+    assert ms_to_str(ms) == expected

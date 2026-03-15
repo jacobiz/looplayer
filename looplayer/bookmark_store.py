@@ -91,9 +91,13 @@ class BookmarkStore:
             for k, v in self._data.items()
         }
         tmp = self._path.with_suffix(".tmp")
-        with tmp.open("w", encoding="utf-8") as f:
-            json.dump(raw, f, ensure_ascii=False, indent=2)
-        tmp.replace(self._path)
+        try:
+            with tmp.open("w", encoding="utf-8") as f:
+                json.dump(raw, f, ensure_ascii=False, indent=2)
+            tmp.replace(self._path)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
 
     # ── CRUD ────────────────────────────────────────────────
 
@@ -166,5 +170,12 @@ class BookmarkStore:
             if bid in bms_by_id:
                 bms_by_id[bid].order = i
                 reordered.append(bms_by_id[bid])
+        # ordered_ids に含まれなかったブックマークを末尾に追加（消失防止）
+        included = set(ordered_ids)
+        for tail, bm in enumerate(
+            b for b in self._data.get(video_path, []) if b.id not in included
+        ):
+            bm.order = len(reordered) + tail
+            reordered.append(bm)
         self._data[video_path] = reordered
         self._save_all()

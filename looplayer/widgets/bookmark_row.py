@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QEvent, pyqtSignal
 
 from looplayer.bookmark_store import LoopBookmark
-from looplayer.utils import _ms_to_str
+from looplayer.utils import ms_to_str
 
 
 class BookmarkRow(QWidget):
@@ -29,7 +29,7 @@ class BookmarkRow(QWidget):
         self.name_label.installEventFilter(self)
 
         time_label = QLabel(
-            f"A:{_ms_to_str(bm.point_a_ms)}  B:{_ms_to_str(bm.point_b_ms)}"
+            f"A:{ms_to_str(bm.point_a_ms)}  B:{ms_to_str(bm.point_b_ms)}"
         )
         time_label.setStyleSheet("color: #888; font-size: 11px;")
 

@@ -9,7 +9,7 @@ from looplayer.bookmark_store import LoopBookmark
 @dataclass
 class SequentialPlayState:
     """連続再生の進行状態を管理する。"""
-    bookmarks: list
+    bookmarks: list[LoopBookmark]
     current_index: int = 0
     active: bool = True
     remaining_repeats: int = field(init=False)

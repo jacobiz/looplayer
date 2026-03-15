@@ -10,7 +10,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
 from looplayer.sequential import SequentialPlayState
-from looplayer.utils import _ms_to_str
+from looplayer.utils import ms_to_str
 from looplayer.widgets.bookmark_panel import BookmarkPanel
 
 
@@ -18,7 +18,7 @@ class VideoPlayer(QMainWindow):
     # VLC イベントスレッドから UI スレッドへ安全に渡すためのシグナル
     _error_occurred = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, store: BookmarkStore | None = None):
         super().__init__()
         self.setWindowTitle("Video Player")
         self.setMinimumSize(800, 600)
@@ -39,8 +39,8 @@ class VideoPlayer(QMainWindow):
         # 連続再生状態
         self._seq_state: SequentialPlayState | None = None
 
-        # ブックマークストア
-        self._store = BookmarkStore()
+        # ブックマークストア（テスト時は tmp_path を渡して実環境を汚染しない）
+        self._store = store if store is not None else BookmarkStore()
 
         self._build_ui()
 
@@ -141,6 +141,8 @@ class VideoPlayer(QMainWindow):
         win_id = int(self.video_frame.winId())
         if sys.platform == "win32":
             self.media_player.set_hwnd(win_id)
+        elif sys.platform == "darwin":
+            self.media_player.set_nsobject(win_id)
         else:
             self.media_player.set_xwindow(win_id)
 
@@ -179,7 +181,7 @@ class VideoPlayer(QMainWindow):
         if length_ms > 0 and not self.seek_slider.isSliderDown():
             self.seek_slider.setValue(int(pos * 1000))
             self.time_label.setText(
-                f"{_ms_to_str(int(pos * length_ms))} / {_ms_to_str(length_ms)}"
+                f"{ms_to_str(int(pos * length_ms))} / {ms_to_str(length_ms)}"
             )
 
         # 連続再生チェック（通常の AB ループより優先）
@@ -195,9 +197,10 @@ class VideoPlayer(QMainWindow):
 
         # 通常 AB ループチェック
         if self.ab_loop_active and self.ab_point_a is not None and self.ab_point_b is not None:
-            current_ms = int(pos * length_ms) if length_ms > 0 else 0
-            if current_ms >= self.ab_point_b:
-                self.media_player.set_time(self.ab_point_a)
+            if length_ms > 0:
+                current_ms = int(pos * length_ms)
+                if current_ms >= self.ab_point_b:
+                    self.media_player.set_time(self.ab_point_a)
 
     # ── AB ループ操作 ─────────────────────────────────────────
 
@@ -237,8 +240,8 @@ class VideoPlayer(QMainWindow):
         self._update_save_btn_state()
 
     def _update_ab_info(self):
-        a_str = _ms_to_str(self.ab_point_a) if self.ab_point_a is not None else "--"
-        b_str = _ms_to_str(self.ab_point_b) if self.ab_point_b is not None else "--"
+        a_str = ms_to_str(self.ab_point_a) if self.ab_point_a is not None else "--"
+        b_str = ms_to_str(self.ab_point_b) if self.ab_point_b is not None else "--"
         self.ab_info_label.setText(f"A: {a_str}  B: {b_str}")
 
     def _update_save_btn_state(self):

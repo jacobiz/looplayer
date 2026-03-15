@@ -1,7 +1,7 @@
 """ユーティリティ関数。"""
 
 
-def _ms_to_str(ms) -> str:
+def ms_to_str(ms) -> str:
     if ms is None or ms < 0:
         return "00:00"
     s = ms // 1000
