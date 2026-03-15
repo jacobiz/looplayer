@@ -1,14 +1,18 @@
+import os
 import sys
 import vlc
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QSlider, QLabel, QFileDialog, QStyle
+    QPushButton, QSlider, QLabel, QFileDialog, QMessageBox, QStyle
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon
 
 
 class VideoPlayer(QMainWindow):
+    # VLC イベントスレッドから UI スレッドへ安全に渡すためのシグナル
+    _error_occurred = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Video Player")
@@ -16,6 +20,11 @@ class VideoPlayer(QMainWindow):
 
         self.instance = vlc.Instance()
         self.media_player = self.instance.media_player_new()
+
+        # FR-015: ファイルが開けない場合のエラーイベント購読
+        self._error_occurred.connect(self._show_error_dialog)
+        em = self.media_player.event_manager()
+        em.event_attach(vlc.EventType.MediaPlayerEncounteredError, self._on_media_error)
 
         self.ab_point_a = None
         self.ab_point_b = None
@@ -117,7 +126,7 @@ class VideoPlayer(QMainWindow):
 
         self.media_player.play()
         self.play_btn.setText("一時停止")
-        self.setWindowTitle(f"Video Player - {path.split('/')[-1]}")
+        self.setWindowTitle(f"Video Player - {os.path.basename(path)}")
         self.reset_ab()
 
     def toggle_play(self):
@@ -170,6 +179,7 @@ class VideoPlayer(QMainWindow):
 
     def toggle_ab_loop(self, checked):
         self.ab_loop_active = checked
+        self.ab_toggle_btn.setChecked(checked)
         self.ab_toggle_btn.setText("ABループ: ON" if checked else "ABループ: OFF")
 
     def reset_ab(self):
@@ -179,6 +189,14 @@ class VideoPlayer(QMainWindow):
         self.ab_toggle_btn.setChecked(False)
         self.ab_toggle_btn.setText("ABループ: OFF")
         self._update_ab_info()
+
+    def _on_media_error(self, _event):
+        """VLC エラーイベントのコールバック（VLC スレッドから呼ばれる）。"""
+        self._error_occurred.emit()
+
+    def _show_error_dialog(self):
+        """UI スレッドでエラーダイアログを表示する。直前の再生状態は変更しない。"""
+        QMessageBox.warning(self, "エラー", "動画ファイルを開けませんでした。")
 
     def _update_ab_info(self):
         a_str = _ms_to_str(self.ab_point_a) if self.ab_point_a is not None else "--"
