@@ -1,0 +1,15 @@
+# 環境変数 (PAT などを含むため絶対にコミットしない)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# VSCode
+.vscode/

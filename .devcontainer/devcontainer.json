@@ -1,0 +1,62 @@
+{
+  "name": "Video Player (Python + PyQt6 + VLC)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  // .env が未作成の場合は .env.example からコピーして警告を出す
+  "initializeCommand": "[ -f ${localWorkspaceFolder}/.env ] || (cp ${localWorkspaceFolder}/.env.example ${localWorkspaceFolder}/.env && echo '[devcontainer] .env を .env.example から作成しました。GH_TOKEN を設定してください。')",
+
+  // GUI apps need access to the host display via WSLg or X11.
+  // .env はコンテナ起動時に Docker が直接読み込む (source 不要)
+  "runArgs": [
+    "--net=host",
+    "--env-file", "${localWorkspaceFolder}/.env",
+    "-e", "DISPLAY=${localEnv:DISPLAY}",
+    "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
+    // WSLg socket (Windows 11 + WSL2)
+    "-v", "/mnt/wslg:/mnt/wslg:rw",
+    "-e", "WAYLAND_DISPLAY=${localEnv:WAYLAND_DISPLAY}",
+    "-e", "XDG_RUNTIME_DIR=${localEnv:XDG_RUNTIME_DIR}",
+    "-v", "/run/user/1000:/run/user/1000:rw"
+  ],
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "charliermarsh.ruff",
+        "ms-python.black-formatter",
+        "njpwerner.autodocstring",
+        "eamodio.gitlens",
+        "streetsidesoftware.code-spell-checker",
+        "GitHub.vscode-pull-request-github"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+        "ruff.enable": true,
+        "ruff.organizeImports": true,
+        "python.analysis.typeCheckingMode": "basic",
+        "python.analysis.autoImportCompletions": true,
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true
+      }
+    }
+  },
+
+  // gh auth login with PAT loaded from .env via --env-file
+  "postCreateCommand": "pip install --no-cache-dir -r requirements.txt && [ -n \"$GH_TOKEN\" ] && echo \"$GH_TOKEN\" | gh auth login --with-token || true",
+
+  "remoteUser": "root"
+}
