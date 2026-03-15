@@ -6,10 +6,12 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QSlider, QLabel, QFileDialog, QMessageBox,
 )
-from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
+from PyQt6.QtGui import QAction, QActionGroup, QKeySequence, QDragEnterEvent, QDropEvent
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
+from looplayer.bookmark_io import export_bookmarks, import_bookmarks
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
+from looplayer.recent_files import RecentFiles
 from looplayer.sequential import SequentialPlayState
 from looplayer.utils import ms_to_str
 from looplayer.widgets.bookmark_panel import BookmarkPanel
@@ -18,8 +20,10 @@ from looplayer.widgets.bookmark_panel import BookmarkPanel
 class VideoPlayer(QMainWindow):
     # VLC イベントスレッドから UI スレッドへ安全に渡すためのシグナル
     _error_occurred = pyqtSignal()
+    # US3: VLC の MediaPlayerVideoChanged イベントを UI スレッドに転送
+    _video_changed = pyqtSignal()
 
-    def __init__(self, store: BookmarkStore | None = None):
+    def __init__(self, store: BookmarkStore | None = None, recent_storage=None):
         super().__init__()
         self.setWindowTitle("Video Player")
         self.setMinimumSize(800, 600)
@@ -32,6 +36,19 @@ class VideoPlayer(QMainWindow):
         self._error_occurred.connect(self._show_error_dialog)
         em = self.media_player.event_manager()
         em.event_attach(vlc.EventType.MediaPlayerEncounteredError, self._on_media_error)
+
+        # US3: 動画変更イベント → UI スレッドでポーリング開始
+        self._video_changed.connect(self._start_size_poll)
+        self._size_poll_timer = QTimer(self)
+        self._size_poll_timer.setInterval(50)
+        self._size_poll_timer.timeout.connect(self._poll_video_size)
+        self._auto_resizing = False
+
+        # US4: フルスクリーン中カーソル自動非表示
+        self._cursor_hide_timer = QTimer(self)
+        self._cursor_hide_timer.setSingleShot(True)
+        self._cursor_hide_timer.setInterval(3000)
+        self._cursor_hide_timer.timeout.connect(self._hide_cursor)
 
         self.ab_point_a = None
         self.ab_point_b = None
@@ -54,8 +71,14 @@ class VideoPlayer(QMainWindow):
         # ブックマークストア（テスト時は tmp_path を渡して実環境を汚染しない）
         self._store = store if store is not None else BookmarkStore()
 
+        # US2: 最近開いたファイル（テスト時は tmp_path を渡す）
+        self._recent = RecentFiles(storage_path=recent_storage)
+
         self._build_ui()
         self._build_menus()
+
+        # US1: ドラッグ＆ドロップを有効化
+        self.setAcceptDrops(True)
 
         self.timer = QTimer(self)
         self.timer.setInterval(200)
@@ -167,6 +190,23 @@ class VideoPlayer(QMainWindow):
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
+        # US2: 最近開いたファイル サブメニュー
+        self._recent_menu = file_menu.addMenu("最近開いたファイル(&R)")
+        self._rebuild_recent_menu()
+
+        file_menu.addSeparator()
+
+        # US6: ブックマークエクスポート（動画未選択時は無効）
+        self._export_action = QAction("ブックマークをエクスポート...", self)
+        self._export_action.setEnabled(False)
+        self._export_action.triggered.connect(self._export_bookmarks)
+        file_menu.addAction(self._export_action)
+
+        # US6: ブックマークインポート
+        import_action = QAction("ブックマークをインポート...", self)
+        import_action.triggered.connect(self._import_bookmarks)
+        file_menu.addAction(import_action)
+
         file_menu.addSeparator()
 
         quit_action = QAction("終了", self)
@@ -242,12 +282,25 @@ class VideoPlayer(QMainWindow):
 
         view_menu.addSeparator()
 
+        fit_window_action = QAction("ウィンドウを動画サイズに合わせる", self)
+        fit_window_action.triggered.connect(self._start_size_poll)
+        view_menu.addAction(fit_window_action)
+
+        view_menu.addSeparator()
+
         self.always_on_top_action = QAction("常に最前面に表示", self)
         self.always_on_top_action.setCheckable(True)
         self.always_on_top_action.setChecked(False)
         self.always_on_top_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         self.always_on_top_action.triggered.connect(self._toggle_always_on_top)
         view_menu.addAction(self.always_on_top_action)
+
+        # US5: ブックマーク削除 Undo (Ctrl+Z)
+        undo_action = QAction("元に戻す", self)
+        undo_action.setShortcut(QKeySequence("Ctrl+Z"))
+        undo_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        undo_action.triggered.connect(lambda: self.bookmark_panel.undo_delete())
+        self.addAction(undo_action)
 
         # シークショートカット（←/→は音量上下と競合しないよう個別追加）
         seek_back_action = QAction("5秒戻る", self)
@@ -278,7 +331,11 @@ class VideoPlayer(QMainWindow):
         )
         if not path:
             return
+        self._open_path(path)
 
+    def _open_path(self, path: str) -> None:
+        """ダイアログなしでパスを直接開くコアロジック（D&D・最近開いたファイルで共用）。"""
+        path = os.path.normpath(path)
         self._current_video_path = path
         media = self.instance.media_new(path)
         self.media_player.set_media(media)
@@ -301,6 +358,149 @@ class VideoPlayer(QMainWindow):
 
         # FR-012: ファイルを開き直すたびに再生速度を 1.0 にリセット
         self._set_playback_rate(1.0)
+
+        # US2: 最近開いたファイルに追加
+        self._recent.add(path)
+        self._rebuild_recent_menu()
+
+        # US3: 動画変更シグナルを emit してポーリング開始
+        self._video_changed.emit()
+
+        # US6: 動画を開いたらエクスポートを有効化
+        self._export_action.setEnabled(True)
+
+    def _rebuild_recent_menu(self) -> None:
+        """US2: 最近開いたファイルメニューを再構築する。"""
+        from pathlib import Path as _Path
+        self._recent_menu.clear()
+        for p in self._recent.files:
+            action = QAction(_Path(p).name, self)
+            action.setToolTip(p)
+            action.setData(p)
+            action.triggered.connect(lambda checked, path=p: self._open_recent(path))
+            self._recent_menu.addAction(action)
+
+    def _open_recent(self, path: str) -> None:
+        """US2: 最近開いたファイルを選択したときに呼ばれる。"""
+        import os as _os
+        if not _os.path.exists(path):
+            self._recent.remove(path)
+            self._rebuild_recent_menu()
+            QMessageBox.warning(self, "ファイルが見つかりません", f"ファイルが見つかりません:\n{path}")
+            return
+        self._open_path(path)
+
+    # ── US6: ブックマーク エクスポート/インポート ────────────
+
+    def _export_bookmarks(self) -> None:
+        """US6: 現在の動画のブックマークを JSON ファイルにエクスポートする。"""
+        if self._current_video_path is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "ブックマークをエクスポート", "", "JSON ファイル (*.json);;すべてのファイル (*)"
+        )
+        if not path:
+            return
+        bms = self._store.get_bookmarks(self._current_video_path)
+        try:
+            export_bookmarks(bms, path)
+        except OSError as e:
+            QMessageBox.warning(self, "エクスポートエラー", f"ファイルの書き込みに失敗しました:\n{e}")
+
+    def _import_bookmarks(self) -> None:
+        """US6: JSON ファイルからブックマークをインポートする（重複スキップ）。"""
+        if self._current_video_path is None:
+            QMessageBox.warning(self, "動画が開かれていません", "ブックマークをインポートするには動画を開いてください。")
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "ブックマークをインポート", "", "JSON ファイル (*.json);;すべてのファイル (*)"
+        )
+        if not path:
+            return
+        try:
+            imported = import_bookmarks(path)
+        except ValueError as e:
+            QMessageBox.warning(self, "インポートエラー", str(e))
+            return
+        existing = self._store.get_bookmarks(self._current_video_path)
+        existing_pairs = {(bm.point_a_ms, bm.point_b_ms) for bm in existing}
+        for bm_dict in imported:
+            pair = (bm_dict["point_a_ms"], bm_dict["point_b_ms"])
+            if pair in existing_pairs:
+                continue
+            try:
+                new_bm = LoopBookmark(
+                    point_a_ms=bm_dict["point_a_ms"],
+                    point_b_ms=bm_dict["point_b_ms"],
+                    name=bm_dict.get("name", ""),
+                    repeat_count=bm_dict.get("repeat_count", 1),
+                )
+                self._store.add(self._current_video_path, new_bm)
+                existing_pairs.add(pair)
+            except ValueError:
+                continue  # 不正なブックマーク（A >= B など）はスキップ
+        self.bookmark_panel._refresh_list()
+
+    # ── US3: ウィンドウリサイズ ──────────────────────────────
+
+    def _on_vlc_video_changed(self) -> None:
+        """動画変更時に呼ばれる → シグナル経由でポーリングを開始。"""
+        self._video_changed.emit()
+
+    def _start_size_poll(self) -> None:
+        """UI スレッドでポーリングタイマーを開始する。"""
+        self._user_resized = False
+        self._size_poll_timer.start()
+
+    def _poll_video_size(self) -> None:
+        """50ms ごとに動画サイズを確認し、非ゼロになったらリサイズしてタイマーを停止。"""
+        w, h = self.media_player.video_get_size()
+        if w and h:
+            self._size_poll_timer.stop()
+            self._resize_to_video(w, h)
+
+    def _resize_to_video(self, w: int, h: int) -> None:
+        """動画解像度に合わせてウィンドウをリサイズする（クランプあり）。"""
+        if self.isFullScreen():
+            return
+        screen = self.screen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            max_w, max_h = avail.width(), avail.height()
+        else:
+            max_w, max_h = 1920, 1080
+        target_w = max(800, min(w, max_w))
+        target_h = max(600, min(h, max_h))
+        # 自動リサイズ中フラグを立てて resizeEvent が誤ってタイマーを止めないようにする
+        self._auto_resizing = True
+        try:
+            self.resize(target_w, target_h)
+        finally:
+            self._auto_resizing = False
+
+    def resizeEvent(self, event) -> None:
+        """ユーザー手動リサイズ時にポーリングタイマーを停止する（自動リサイズ時は無視）。"""
+        if not self._auto_resizing and self._size_poll_timer.isActive():
+            self._size_poll_timer.stop()
+        super().resizeEvent(event)
+
+    _SUPPORTED_EXTENSIONS = {".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v"}
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """US1: URL を含む DragEnter イベントを受け付ける。"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        """US1: ドロップされたファイルのうち最初の対応拡張子ローカルファイルを開く。"""
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                path = url.toLocalFile()
+                if os.path.splitext(path)[1].lower() in self._SUPPORTED_EXTENSIONS:
+                    self._open_path(path)
+                    return
 
     # ── 再生制御 ─────────────────────────────────────────────
 
@@ -422,21 +622,34 @@ class VideoPlayer(QMainWindow):
             self.video_frame.setMouseTracking(True)
             self.centralWidget().setMouseTracking(True)
             self.setMouseTracking(True)
+            # US4: フルスクリーン突入時にカーソル非表示タイマー起動
+            self._cursor_hide_timer.start()
 
     def _exit_fullscreen(self):
         """フルスクリーンを解除して通常ウィンドウに戻る。"""
         if self.isFullScreen():
             self._menu_hide_timer.stop()
+            # US4: フルスクリーン解除時にタイマー停止・カーソル復元
+            self._cursor_hide_timer.stop()
+            self.unsetCursor()
             self.showNormal()
             self.controls_panel.show()
             self.menuBar().show()
 
+    def _hide_cursor(self) -> None:
+        """US4: フルスクリーン中のみカーソルを非表示にする。"""
+        if self.isFullScreen():
+            self.setCursor(Qt.CursorShape.BlankCursor)
+
     def mouseMoveEvent(self, event):
-        """FR-016: フルスクリーン中のマウス追跡でメニューバーを自動表示。"""
+        """FR-016: フルスクリーン中のマウス追跡でメニューバーを自動表示。US4: カーソルを復元。"""
         if self.isFullScreen():
             if event.pos().y() < 15:
                 self.menuBar().show()
                 self._menu_hide_timer.start(2000)
+            # US4: マウス移動でカーソル復元・タイマーリセット
+            self.unsetCursor()
+            self._cursor_hide_timer.start()
         super().mouseMoveEvent(event)
 
     # ── 常に最前面操作 ────────────────────────────────────────

@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QAbstractItemView,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
 from looplayer.sequential import SequentialPlayState
@@ -21,6 +21,14 @@ class BookmarkPanel(QWidget):
         self._store = store
         self._video_path: str | None = None
         self._seq_active = False
+
+        # US5: 削除 Undo 用の保留状態
+        self._pending_delete: dict | None = None
+        self._undo_timer = QTimer(self)
+        self._undo_timer.setSingleShot(True)
+        self._undo_timer.setInterval(5000)
+        self._undo_timer.timeout.connect(self._commit_delete)
+
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -57,7 +65,8 @@ class BookmarkPanel(QWidget):
     # ── 公開メソッド ────────────────────────────────────────
 
     def load_video(self, video_path: str) -> None:
-        """動画ファイルが開かれたときに呼び出す（FR-008）。"""
+        """動画ファイルが開かれたときに呼び出す（FR-008）。US5: 保留削除を確定する。"""
+        self._commit_delete()
         self._video_path = video_path
         self._seq_active = False
         self.seq_btn.setChecked(False)
@@ -118,10 +127,47 @@ class BookmarkPanel(QWidget):
                 break
 
     def _on_delete(self, bookmark_id: str) -> None:
+        """US5: 即時削除せず _pending_delete に保留し、5秒後に確定する。"""
         if self._video_path is None:
             return
+        # 前の保留があればコミット
+        if self._pending_delete is not None:
+            self._commit_delete()
+        # 削除対象を取得してから Store から削除（削除前の全順序を保存）
+        bms = self._store.get_bookmarks(self._video_path)
+        bm = next((b for b in bms if b.id == bookmark_id), None)
+        if bm is None:
+            return
+        # 削除前の ID 順序スナップショットを保存（Undo 時に完全復元するため）
+        order_snapshot = [b.id for b in bms]
+        self._pending_delete = {"bookmark": bm, "order_snapshot": order_snapshot}
         self._store.delete(self._video_path, bookmark_id)
+        self._undo_timer.start()
         self._refresh_list()
+
+    def _commit_delete(self) -> None:
+        """US5: 保留中の削除を確定する（タイマー発火時・次の削除・動画切替時）。"""
+        self._undo_timer.stop()
+        self._pending_delete = None
+
+    def _undo_delete(self) -> None:
+        """US5: 保留中の削除を取り消して元の順序で完全復元する。"""
+        if self._pending_delete is None:
+            return
+        bm = self._pending_delete["bookmark"]
+        order_snapshot = self._pending_delete["order_snapshot"]
+        self._undo_timer.stop()
+        self._pending_delete = None
+        if self._video_path is None:
+            return
+        self._store.add(self._video_path, bm)
+        # 削除前の ID 順序スナップショットで完全復元（再採番問題を回避）
+        self._store.update_order(self._video_path, order_snapshot)
+        self._refresh_list()
+
+    def undo_delete(self) -> None:
+        """US5: _undo_delete の公開インターフェース（player.py から呼ぶ用）。"""
+        self._undo_delete()
 
     def _on_repeat_changed(self, bookmark_id: str, count: int) -> None:
         if self._video_path is None:
