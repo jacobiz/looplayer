@@ -1,0 +1,40 @@
+name: Build Windows App
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: VLC インストール
+        run: choco install vlc --yes --no-progress
+
+      - name: 依存パッケージインストール
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: PyInstaller でビルド
+        run: |
+          $vlc = "C:\Program Files\VideoLAN\VLC"
+          pyinstaller --onefile --windowed --name VideoPlayer `
+            --add-binary "$vlc\libvlc.dll;." `
+            --add-binary "$vlc\libvlccore.dll;." `
+            --add-data "$vlc\plugins;plugins" `
+            main.py
+
+      - name: アーティファクトをアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoPlayer-Windows
+          path: dist/VideoPlayer.exe
+          retention-days: 30
