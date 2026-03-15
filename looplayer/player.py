@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QSlider, QLabel, QFileDialog, QMessageBox,
 )
+from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
@@ -39,10 +40,22 @@ class VideoPlayer(QMainWindow):
         # 連続再生状態
         self._seq_state: SequentialPlayState | None = None
 
+        # 音量状態
+        self._volume: int = 80
+        self._is_muted: bool = False
+        self._pre_mute_volume: int = 80
+
+        # 再生速度状態
+        self._playback_rate: float = 1.0
+
+        # 常に最前面フラグ
+        self._always_on_top: bool = False
+
         # ブックマークストア（テスト時は tmp_path を渡して実環境を汚染しない）
         self._store = store if store is not None else BookmarkStore()
 
         self._build_ui()
+        self._build_menus()
 
         self.timer = QTimer(self)
         self.timer.setInterval(200)
@@ -56,11 +69,32 @@ class VideoPlayer(QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        # Video frame
+        # Video frame（フルスクリーン時も常時表示）
         self.video_frame = QWidget()
         self.video_frame.setStyleSheet("background-color: black;")
         self.video_frame.setMinimumHeight(400)
         layout.addWidget(self.video_frame, stretch=1)
+
+        # コントロール群コンテナ（フルスクリーン時に一括 hide/show）
+        self.controls_panel = QWidget()
+        controls_layout = QVBoxLayout(self.controls_panel)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(6)
+        layout.addWidget(self.controls_panel)
+
+        # 音量スライダー（シークバーの上）
+        volume_bar = QHBoxLayout()
+        self.volume_label = QLabel("80%")
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(80)
+        self.volume_slider.setFixedWidth(120)
+        self.volume_slider.valueChanged.connect(self._on_volume_slider_changed)
+        volume_bar.addWidget(QLabel("音量:"))
+        volume_bar.addWidget(self.volume_slider)
+        volume_bar.addWidget(self.volume_label)
+        volume_bar.addStretch()
+        controls_layout.addLayout(volume_bar)
 
         # Seek bar
         seek_layout = QHBoxLayout()
@@ -70,7 +104,7 @@ class VideoPlayer(QMainWindow):
         self.seek_slider.sliderMoved.connect(self._on_seek)
         seek_layout.addWidget(self.seek_slider)
         seek_layout.addWidget(self.time_label)
-        layout.addLayout(seek_layout)
+        controls_layout.addLayout(seek_layout)
 
         # Playback controls
         ctrl_layout = QHBoxLayout()
@@ -84,7 +118,7 @@ class VideoPlayer(QMainWindow):
         ctrl_layout.addWidget(self.play_btn)
         ctrl_layout.addWidget(self.stop_btn)
         ctrl_layout.addStretch()
-        layout.addLayout(ctrl_layout)
+        controls_layout.addLayout(ctrl_layout)
 
         # AB loop controls
         ab_layout = QHBoxLayout()
@@ -104,7 +138,7 @@ class VideoPlayer(QMainWindow):
         ab_layout.addWidget(self.ab_reset_btn)
         ab_layout.addWidget(self.ab_info_label)
         ab_layout.addStretch()
-        layout.addLayout(ab_layout)
+        controls_layout.addLayout(ab_layout)
 
         # ブックマーク保存ボタン（FR-001: A・B点設定済み時のみ有効）
         bookmark_save_layout = QHBoxLayout()
@@ -113,14 +147,125 @@ class VideoPlayer(QMainWindow):
         self.save_bookmark_btn.clicked.connect(self._save_bookmark)
         bookmark_save_layout.addWidget(self.save_bookmark_btn)
         bookmark_save_layout.addStretch()
-        layout.addLayout(bookmark_save_layout)
+        controls_layout.addLayout(bookmark_save_layout)
 
         # ブックマークパネル
         self.bookmark_panel = BookmarkPanel(self._store)
         self.bookmark_panel.bookmark_selected.connect(self._on_bookmark_selected)
         self.bookmark_panel.sequential_started.connect(self._on_sequential_started)
         self.bookmark_panel.sequential_stopped.connect(self._on_sequential_stopped)
-        layout.addWidget(self.bookmark_panel)
+        controls_layout.addWidget(self.bookmark_panel)
+
+    def _build_menus(self):
+        """メニューバーを構築する（T005/T006/T007/T013/T015/T017/T019）。"""
+        # ── ファイルメニュー ──────────────────────────────────
+        file_menu = self.menuBar().addMenu("ファイル(&F)")
+
+        open_action = QAction("開く...", self)
+        open_action.setShortcut(QKeySequence("Ctrl+O"))
+        open_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        open_action.triggered.connect(self.open_file)
+        file_menu.addAction(open_action)
+
+        file_menu.addSeparator()
+
+        quit_action = QAction("終了", self)
+        quit_action.setShortcut(QKeySequence("Ctrl+Q"))
+        quit_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        quit_action.triggered.connect(self.close)
+        file_menu.addAction(quit_action)
+
+        # ── 再生メニュー ──────────────────────────────────────
+        play_menu = self.menuBar().addMenu("再生(&P)")
+
+        play_pause_action = QAction("再生/一時停止", self)
+        play_pause_action.setShortcut(QKeySequence("Space"))
+        play_pause_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        play_pause_action.triggered.connect(self.toggle_play)
+        play_menu.addAction(play_pause_action)
+
+        stop_action = QAction("停止", self)
+        stop_action.triggered.connect(self.stop)
+        play_menu.addAction(stop_action)
+
+        play_menu.addSeparator()
+
+        vol_up_action = QAction("音量を上げる", self)
+        vol_up_action.setShortcut(QKeySequence(Qt.Key.Key_Up))
+        vol_up_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        vol_up_action.triggered.connect(lambda: self._set_volume(self._volume + 10))
+        play_menu.addAction(vol_up_action)
+
+        vol_down_action = QAction("音量を下げる", self)
+        vol_down_action.setShortcut(QKeySequence(Qt.Key.Key_Down))
+        vol_down_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        vol_down_action.triggered.connect(lambda: self._set_volume(self._volume - 10))
+        play_menu.addAction(vol_down_action)
+
+        mute_action = QAction("ミュート", self)
+        mute_action.setShortcut(QKeySequence("M"))
+        mute_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        mute_action.triggered.connect(self._toggle_mute)
+        play_menu.addAction(mute_action)
+
+        play_menu.addSeparator()
+
+        # 再生速度サブメニュー
+        speed_menu = play_menu.addMenu("再生速度")
+        self.speed_action_group = QActionGroup(self)
+        self.speed_action_group.setExclusive(True)
+        for rate, label in [(0.5, "0.5倍"), (0.75, "0.75倍"), (1.0, "標準 (1.0倍)"),
+                            (1.25, "1.25倍"), (1.5, "1.5倍"), (2.0, "2.0倍")]:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(rate == 1.0)
+            action.setData(rate)
+            action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+            self.speed_action_group.addAction(action)
+            speed_menu.addAction(action)
+            action.triggered.connect(lambda checked, r=rate: self._set_playback_rate(r))
+
+        # ── 表示メニュー ──────────────────────────────────────
+        view_menu = self.menuBar().addMenu("表示(&V)")
+
+        self.fullscreen_action = QAction("フルスクリーン", self)
+        self.fullscreen_action.setShortcut(QKeySequence("F"))
+        self.fullscreen_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
+        view_menu.addAction(self.fullscreen_action)
+
+        esc_action = QAction("フルスクリーン解除", self)
+        esc_action.setShortcut(QKeySequence("Escape"))
+        esc_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        esc_action.triggered.connect(self._exit_fullscreen)
+        view_menu.addAction(esc_action)
+
+        view_menu.addSeparator()
+
+        self.always_on_top_action = QAction("常に最前面に表示", self)
+        self.always_on_top_action.setCheckable(True)
+        self.always_on_top_action.setChecked(False)
+        self.always_on_top_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.always_on_top_action.triggered.connect(self._toggle_always_on_top)
+        view_menu.addAction(self.always_on_top_action)
+
+        # シークショートカット（←/→は音量上下と競合しないよう個別追加）
+        seek_back_action = QAction("5秒戻る", self)
+        seek_back_action.setShortcut(QKeySequence(Qt.Key.Key_Left))
+        seek_back_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        seek_back_action.triggered.connect(lambda: self._seek_relative(-5000))
+        self.addAction(seek_back_action)
+
+        seek_fwd_action = QAction("5秒進む", self)
+        seek_fwd_action.setShortcut(QKeySequence(Qt.Key.Key_Right))
+        seek_fwd_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        seek_fwd_action.triggered.connect(lambda: self._seek_relative(5000))
+        self.addAction(seek_fwd_action)
+
+        # フルスクリーン中のメニューバー自動非表示タイマー
+        self._menu_hide_timer = QTimer(self)
+        self._menu_hide_timer.setSingleShot(True)
+        self._menu_hide_timer.timeout.connect(lambda: self.menuBar().hide() if self.isFullScreen() else None)
 
     # ── ファイル操作 ─────────────────────────────────────────
 
@@ -154,6 +299,9 @@ class VideoPlayer(QMainWindow):
         # FR-008: 動画に紐づくブックマークを自動ロード
         self.bookmark_panel.load_video(path)
 
+        # FR-012: ファイルを開き直すたびに再生速度を 1.0 にリセット
+        self._set_playback_rate(1.0)
+
     # ── 再生制御 ─────────────────────────────────────────────
 
     def toggle_play(self):
@@ -169,6 +317,15 @@ class VideoPlayer(QMainWindow):
         self.play_btn.setText("再生")
         self.seek_slider.setValue(0)
         self.time_label.setText("00:00 / 00:00")
+
+    def _seek_relative(self, ms: int):
+        """現在位置から ms ミリ秒だけシークする。"""
+        length_ms = self.media_player.get_length()
+        if length_ms <= 0:
+            return
+        current_ms = self.media_player.get_time()
+        new_ms = max(0, min(current_ms + ms, length_ms))
+        self.media_player.set_time(new_ms)
 
     def _on_seek(self, value):
         if self.media_player.get_length() > 0:
@@ -201,6 +358,99 @@ class VideoPlayer(QMainWindow):
                 current_ms = int(pos * length_ms)
                 if current_ms >= self.ab_point_b:
                     self.media_player.set_time(self.ab_point_a)
+
+    # ── 音量・ミュート操作 ────────────────────────────────────
+
+    def _on_volume_slider_changed(self, value: int):
+        """スライダー操作時に音量を更新する（スライダーへの再帰更新を避ける）。"""
+        self._volume = value
+        self._is_muted = False
+        self.volume_label.setText(f"{self._volume}%")
+        self.media_player.audio_set_volume(self._volume)
+
+    def _set_volume(self, v: int):
+        """音量を設定する（0〜100 クランプ・スライダー同期・VLC 反映）。"""
+        self._volume = max(0, min(v, 100))
+        self.volume_slider.blockSignals(True)
+        self.volume_slider.setValue(self._volume)
+        self.volume_slider.blockSignals(False)
+        self.volume_label.setText(f"{self._volume}%")
+        self.media_player.audio_set_volume(self._volume)
+
+    def _toggle_mute(self):
+        """ミュートをトグルする。"""
+        if self._is_muted:
+            self._volume = self._pre_mute_volume
+            self._is_muted = False
+            self.volume_slider.blockSignals(True)
+            self.volume_slider.setValue(self._volume)
+            self.volume_slider.blockSignals(False)
+            self.volume_label.setText(f"{self._volume}%")
+            self.media_player.audio_set_volume(self._volume)
+        else:
+            self._pre_mute_volume = self._volume
+            self._is_muted = True
+            self._volume = 0
+            self.volume_slider.blockSignals(True)
+            self.volume_slider.setValue(0)
+            self.volume_slider.blockSignals(False)
+            self.volume_label.setText("0%")
+            self.media_player.audio_set_volume(0)
+
+    # ── 再生速度操作 ──────────────────────────────────────────
+
+    def _set_playback_rate(self, rate: float):
+        """再生速度を設定し、メニューのチェックマークを更新する。"""
+        self._playback_rate = rate
+        self.media_player.set_rate(rate)
+        # メニューのチェック状態を更新
+        if hasattr(self, "speed_action_group"):
+            for action in self.speed_action_group.actions():
+                action.setChecked(action.data() == rate)
+
+    # ── フルスクリーン操作 ────────────────────────────────────
+
+    def toggle_fullscreen(self):
+        """フルスクリーンをトグルする。"""
+        if self.isFullScreen():
+            self._exit_fullscreen()
+        else:
+            self.showFullScreen()
+            self.controls_panel.hide()
+            self.menuBar().hide()
+            self.video_frame.setMouseTracking(True)
+            self.centralWidget().setMouseTracking(True)
+            self.setMouseTracking(True)
+
+    def _exit_fullscreen(self):
+        """フルスクリーンを解除して通常ウィンドウに戻る。"""
+        if self.isFullScreen():
+            self._menu_hide_timer.stop()
+            self.showNormal()
+            self.controls_panel.show()
+            self.menuBar().show()
+
+    def mouseMoveEvent(self, event):
+        """FR-016: フルスクリーン中のマウス追跡でメニューバーを自動表示。"""
+        if self.isFullScreen():
+            if event.pos().y() < 15:
+                self.menuBar().show()
+                self._menu_hide_timer.start(2000)
+        super().mouseMoveEvent(event)
+
+    # ── 常に最前面操作 ────────────────────────────────────────
+
+    def _toggle_always_on_top(self):
+        """常に最前面フラグをトグルする。"""
+        self._always_on_top = not self._always_on_top
+        flags = self.windowFlags()
+        if self._always_on_top:
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        else:
+            flags &= ~Qt.WindowType.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        self.show()
+        self.always_on_top_action.setChecked(self._always_on_top)
 
     # ── AB ループ操作 ─────────────────────────────────────────
 

@@ -5,6 +5,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-15
 ## Active Technologies
 - Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存） (002-ab-loop-bookmarks)
 - `~/.looplayer/bookmarks.json`（ローカルJSONファイル、追加ライブラリなし） (002-ab-loop-bookmarks)
+- N/A（状態はメモリのみ、音量・速度は永続化しない） (003-player-menus)
 
 - Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 (001-video-player-core)
 
@@ -39,6 +40,7 @@ pytest tests/unit/ -v   # ユニットテストのみ
 Python 3.12.13: Follow standard conventions
 
 ## Recent Changes
+- 003-player-menus: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）
 - 002-ab-loop-bookmarks: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）
 
 - 001-video-player-core: Added Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203
