@@ -42,6 +42,44 @@ class TestSetPlaybackRate:
             assert player._playback_rate == rate
 
 
+class TestSpeedUpDown:
+    """T004: _speed_up / _speed_down の境界動作テスト（US1）。"""
+
+    def test_speed_up_from_1_0_goes_to_1_25(self, player):
+        player._set_playback_rate(1.0)
+        player._speed_up()
+        assert player._playback_rate == 1.25
+
+    def test_speed_down_from_1_0_goes_to_0_75(self, player):
+        player._set_playback_rate(1.0)
+        player._speed_down()
+        assert player._playback_rate == 0.75
+
+    def test_speed_up_at_max_stays_at_max(self, player):
+        player._set_playback_rate(2.0)
+        player._speed_up()
+        assert player._playback_rate == 2.0
+
+    def test_speed_down_at_min_stays_at_min(self, player):
+        player._set_playback_rate(0.5)
+        player._speed_down()
+        assert player._playback_rate == 0.5
+
+    def test_speed_up_traverses_all_rates(self, player):
+        from looplayer.player import _PLAYBACK_RATES
+        player._set_playback_rate(_PLAYBACK_RATES[0])
+        for expected in _PLAYBACK_RATES[1:]:
+            player._speed_up()
+            assert player._playback_rate == expected
+
+    def test_speed_down_traverses_all_rates(self, player):
+        from looplayer.player import _PLAYBACK_RATES
+        player._set_playback_rate(_PLAYBACK_RATES[-1])
+        for expected in reversed(_PLAYBACK_RATES[:-1]):
+            player._speed_down()
+            assert player._playback_rate == expected
+
+
 class TestOpenFileResetsRate:
     def test_open_file_resets_rate_to_1_0(self, player):
         """open_file() が _set_playback_rate(1.0) を呼び出すことを確認。"""
