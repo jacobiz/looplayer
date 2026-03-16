@@ -144,5 +144,5 @@ jobs:
             "dist/LoopPlayer-$VER.dmg#LoopPlayer ディスクイメージ (macOS)" \
             "dist/SHA256SUMS.txt#SHA256 チェックサム" \
             --title "LoopPlayer ${{ github.ref_name }}" \
-            --generate-release-notes \
+            --generate-notes \
             --repo ${{ github.repository }}
