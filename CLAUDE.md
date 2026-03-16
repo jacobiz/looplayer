@@ -11,6 +11,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-16
 - `~/.looplayer/bookmarks.json`（既存・`enabled` フィールドを追加） (005-timeline-seq-info-help)
 - Python 3.12.13 + PyInstaller（バンドラー）、Inno Setup（インストーラフレームワーク）、既存の PyQt6 6.10.2 + python-vlc 3.0.21203 (006-windows-installer)
 - N/A（インストーラはビルド成果物） (006-windows-installer)
+- `~/.looplayer/positions.json`（新規）、`~/.looplayer/settings.json`（新規）、既存の `bookmarks.json`・`recent_files.json` は変更なし (007-player-enhancements)
 
 - Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 (001-video-player-core)
 
@@ -45,9 +46,9 @@ pytest tests/unit/ -v   # ユニットテストのみ
 Python 3.12.13: Follow standard conventions
 
 ## Recent Changes
+- 007-player-enhancements: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）
 - 006-windows-installer: Added Python 3.12.13 + PyInstaller（バンドラー）、Inno Setup（インストーラフレームワーク）、既存の PyQt6 6.10.2 + python-vlc 3.0.21203
 - 005-timeline-seq-info-help: Added Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203
-- 004-player-ux: Added Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 + PyQt6（QDrag, QTimer, QCursor, QFileDialog, QAction）, python-vlc（MediaPlayerVideoChanged イベント）
 
 
 <!-- MANUAL ADDITIONS START -->

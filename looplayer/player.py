@@ -29,11 +29,16 @@ from PyQt6.QtWidgets import QDialog, QGridLayout, QDialogButtonBox, QScrollArea
 from PyQt6.QtGui import QShortcut
 
 
+_PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+
+
 class VideoPlayer(QMainWindow):
     # VLC イベントスレッドから UI スレッドへ安全に渡すためのシグナル
     _error_occurred = pyqtSignal()
     # US3: VLC の MediaPlayerVideoChanged イベントを UI スレッドに転送
     _video_changed = pyqtSignal()
+    # US4: VLC の MediaPlayerEndReached イベントを UI スレッドに転送
+    _playback_ended = pyqtSignal()
 
     def __init__(self, store: BookmarkStore | None = None, recent_storage=None):
         super().__init__()
@@ -48,6 +53,10 @@ class VideoPlayer(QMainWindow):
         self._error_occurred.connect(self._show_error_dialog)
         em = self.media_player.event_manager()
         em.event_attach(vlc.EventType.MediaPlayerEncounteredError, self._on_media_error)
+
+        # US4: 再生終了イベント → UI スレッドで終了時動作を実行
+        self._playback_ended.connect(self._handle_playback_ended)
+        em.event_attach(vlc.EventType.MediaPlayerEndReached, lambda e: self._playback_ended.emit())
 
         # US3: 動画変更イベント → UI スレッドでポーリング開始
         self._video_changed.connect(self._start_size_poll)
@@ -79,6 +88,17 @@ class VideoPlayer(QMainWindow):
 
         # 常に最前面フラグ
         self._always_on_top: bool = False
+
+        # US4: アプリ設定（再生終了動作など）
+        from looplayer.app_settings import AppSettings
+        self._app_settings = AppSettings()
+
+        # US5: 再生位置の記憶
+        from looplayer.playback_position import PlaybackPosition
+        self._playback_position = PlaybackPosition()
+
+        # US7: プレイリスト（フォルダドロップ時）
+        self._playlist = None
 
         # ブックマークストア（テスト時は tmp_path を渡して実環境を汚染しない）
         self._store = store if store is not None else BookmarkStore()
@@ -192,6 +212,9 @@ class VideoPlayer(QMainWindow):
         self.bookmark_panel.sequential_stopped.connect(self._on_sequential_stopped)
         controls_layout.addWidget(self.bookmark_panel)
 
+        # ステータスバー初期化（スクリーンショット通知・速度フィードバック等で使用）
+        self.statusBar()
+
     def _build_menus(self):
         """メニューバーを構築する（T005/T006/T007/T013/T015/T017/T019）。"""
         # ── ファイルメニュー ──────────────────────────────────
@@ -214,6 +237,16 @@ class VideoPlayer(QMainWindow):
         # US2: 最近開いたファイル サブメニュー
         self._recent_menu = file_menu.addMenu("最近開いたファイル(&R)")
         self._rebuild_recent_menu()
+
+        file_menu.addSeparator()
+
+        # US3: スクリーンショット（動画未ロード時は無効）
+        self._screenshot_action = QAction("スクリーンショット(&P)", self)
+        self._screenshot_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        self._screenshot_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._screenshot_action.setEnabled(False)
+        self._screenshot_action.triggered.connect(self._take_screenshot)
+        file_menu.addAction(self._screenshot_action)
 
         file_menu.addSeparator()
 
@@ -286,6 +319,34 @@ class VideoPlayer(QMainWindow):
             speed_menu.addAction(action)
             action.triggered.connect(lambda checked, r=rate: self._set_playback_rate(r))
 
+        play_menu.addSeparator()
+
+        # US4: 再生終了時の動作サブメニュー
+        end_action_menu = play_menu.addMenu("再生終了時の動作(&E)")
+        end_action_group = QActionGroup(self)
+        end_action_group.setExclusive(True)
+        current_action = self._app_settings.end_of_playback_action
+        for action_id, label in [("stop", "停止"), ("rewind", "先頭に戻る"), ("loop", "ループ再生")]:
+            a = QAction(label, self)
+            a.setCheckable(True)
+            a.setChecked(action_id == current_action)
+            a.triggered.connect(lambda checked, v=action_id: setattr(self._app_settings, "end_of_playback_action", v))
+            end_action_group.addAction(a)
+            end_action_menu.addAction(a)
+        self._end_action_menu = end_action_menu
+        self._end_action_group = end_action_group
+
+        play_menu.addSeparator()
+
+        # US2: 音声トラック・字幕トラックサブメニュー
+        self._audio_track_menu = play_menu.addMenu("音声トラック(&A)")
+        self._audio_track_menu.setEnabled(False)
+        self._audio_track_menu.aboutToShow.connect(self._rebuild_audio_track_menu)
+
+        self._subtitle_menu = play_menu.addMenu("字幕(&S)")
+        self._subtitle_menu.setEnabled(False)
+        self._subtitle_menu.aboutToShow.connect(self._rebuild_subtitle_menu)
+
         # ── 表示メニュー ──────────────────────────────────────
         view_menu = self.menuBar().addMenu("表示(&V)")
 
@@ -336,6 +397,36 @@ class VideoPlayer(QMainWindow):
         seek_fwd_action.triggered.connect(lambda: self._seek_relative(5000))
         self.addAction(seek_fwd_action)
 
+        # US1: 精細シーク ±1秒・±10秒
+        seek_1s_back = QShortcut(QKeySequence("Shift+Left"), self)
+        seek_1s_back.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        seek_1s_back.activated.connect(lambda: self._seek_relative(-1000))
+        seek_1s_fwd = QShortcut(QKeySequence("Shift+Right"), self)
+        seek_1s_fwd.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        seek_1s_fwd.activated.connect(lambda: self._seek_relative(1000))
+        seek_10s_back = QShortcut(QKeySequence("Ctrl+Left"), self)
+        seek_10s_back.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        seek_10s_back.activated.connect(lambda: self._seek_relative(-10000))
+        seek_10s_fwd = QShortcut(QKeySequence("Ctrl+Right"), self)
+        seek_10s_fwd.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        seek_10s_fwd.activated.connect(lambda: self._seek_relative(10000))
+
+        # US1: 再生速度ショートカット
+        speed_up_shortcut = QShortcut(QKeySequence("]"), self)
+        speed_up_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        speed_up_shortcut.activated.connect(self._speed_up)
+        speed_down_shortcut = QShortcut(QKeySequence("["), self)
+        speed_down_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        speed_down_shortcut.activated.connect(self._speed_down)
+
+        # US1: フレームコマ送り
+        frame_fwd_shortcut = QShortcut(QKeySequence("."), self)
+        frame_fwd_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        frame_fwd_shortcut.activated.connect(self._frame_forward)
+        frame_back_shortcut = QShortcut(QKeySequence(","), self)
+        frame_back_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        frame_back_shortcut.activated.connect(self._frame_backward)
+
         # ── ヘルプメニュー ──────────────────────────────────────
         help_menu = self.menuBar().addMenu("ヘルプ(&H)")
 
@@ -368,6 +459,14 @@ class VideoPlayer(QMainWindow):
 
     def _open_path(self, path: str) -> None:
         """ダイアログなしでパスを直接開くコアロジック（D&D・最近開いたファイルで共用）。"""
+        # US5: 別ファイルを開く前に現在位置を保存
+        if self._current_video_path:
+            self._playback_position.save(
+                self._current_video_path,
+                self.media_player.get_time(),
+                self.media_player.get_length(),
+            )
+
         path = os.path.normpath(path)
         self._current_video_path = path
         media = self.instance.media_new(path)
@@ -386,6 +485,14 @@ class VideoPlayer(QMainWindow):
         self.setWindowTitle(f"Video Player - {os.path.basename(path)}")
         self.reset_ab()
 
+        # US5: 前回の再生位置を復元（少し遅延してシーク）
+        saved_pos = self._playback_position.load(path)
+        if saved_pos is not None:
+            QTimer.singleShot(300, lambda: (
+                self.media_player.set_time(saved_pos),
+                self.media_player.pause(),
+            ))
+
         # FR-008: 動画に紐づくブックマークを自動ロード
         self.bookmark_panel.load_video(path)
 
@@ -402,8 +509,13 @@ class VideoPlayer(QMainWindow):
         # US6: 動画を開いたらエクスポートを有効化
         self._export_action.setEnabled(True)
 
-        # US3: 動画を開いたら動画情報を有効化
+        # US3: 動画を開いたら動画情報・スクリーンショットを有効化
         self._video_info_action.setEnabled(True)
+        self._screenshot_action.setEnabled(True)
+
+        # US2: 音声・字幕トラックメニューを有効化（内容は aboutToShow で更新）
+        self._audio_track_menu.setEnabled(True)
+        self._subtitle_menu.setEnabled(True)
 
         # US1: タイムラインバーを更新
         self._sync_slider_bookmarks()
@@ -535,13 +647,38 @@ class VideoPlayer(QMainWindow):
             event.ignore()
 
     def dropEvent(self, event: QDropEvent) -> None:
-        """US1: ドロップされたファイルのうち最初の対応拡張子ローカルファイルを開く。"""
+        """US1/US7: ドロップされたファイル・フォルダを処理する。"""
+        from pathlib import Path as _Path
         for url in event.mimeData().urls():
-            if url.isLocalFile():
-                path = url.toLocalFile()
-                if os.path.splitext(path)[1].lower() in self._SUPPORTED_EXTENSIONS:
-                    self._open_path(path)
-                    return
+            if not url.isLocalFile():
+                continue
+            local = _Path(url.toLocalFile())
+            if local.is_dir():
+                self._open_folder(local)
+                return
+            if local.suffix.lower() in self._SUPPORTED_EXTENSIONS:
+                self._playlist = None  # プレイリスト解除
+                self._open_path(str(local))
+                return
+
+    def _open_folder(self, folder) -> None:
+        """US7: フォルダ内の動画をファイル名昇順でプレイリスト再生する。"""
+        from pathlib import Path as _Path
+        from looplayer.playlist import Playlist
+        from PyQt6.QtWidgets import QMessageBox
+        files = sorted(
+            p for p in _Path(folder).iterdir()
+            if not p.name.startswith('.') and p.suffix.lower() in self._SUPPORTED_EXTENSIONS
+        )
+        if not files:
+            QMessageBox.warning(self, "エラー", "対応する動画ファイルが見つかりませんでした。")
+            return
+        if len(files) == 1:
+            self._playlist = None
+            self._open_path(str(files[0]))
+            return
+        self._playlist = Playlist(list(files))
+        self._open_path(str(self._playlist.current()))
 
     # ── 再生制御 ─────────────────────────────────────────────
 
@@ -652,6 +789,88 @@ class VideoPlayer(QMainWindow):
             for action in self.speed_action_group.actions():
                 action.setChecked(action.data() == rate)
 
+    def _rebuild_audio_track_menu(self):
+        """US2: 音声トラックメニューをリアルタイム再構築する（T010）。"""
+        self._audio_track_menu.clear()
+        descs = self.media_player.audio_get_track_description() or []
+        group = QActionGroup(self)
+        group.setExclusive(True)
+        for track_id, name in descs:
+            label = name.decode() if isinstance(name, bytes) else name
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(self.media_player.audio_get_track() == track_id)
+            action.triggered.connect(lambda _, tid=track_id: self.media_player.audio_set_track(tid))
+            group.addAction(action)
+            self._audio_track_menu.addAction(action)
+        self._audio_track_menu.setEnabled(len(descs) > 1)
+
+    def _rebuild_subtitle_menu(self):
+        """US2: 字幕メニューをリアルタイム再構築する（T011）。"""
+        self._subtitle_menu.clear()
+        descs = self.media_player.video_get_spu_description() or []
+        group = QActionGroup(self)
+        group.setExclusive(True)
+        off_action = QAction("字幕なし", self)
+        off_action.setCheckable(True)
+        off_action.setChecked(self.media_player.video_get_spu() == -1)
+        off_action.triggered.connect(lambda: self.media_player.video_set_spu(-1))
+        group.addAction(off_action)
+        self._subtitle_menu.addAction(off_action)
+        for track_id, name in descs:
+            label = name.decode() if isinstance(name, bytes) else name
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(self.media_player.video_get_spu() == track_id)
+            action.triggered.connect(lambda _, tid=track_id: self.media_player.video_set_spu(tid))
+            group.addAction(action)
+            self._subtitle_menu.addAction(action)
+        self._subtitle_menu.setEnabled(bool(descs))
+
+    def _take_screenshot(self):
+        """US3: 現在フレームをデスクトップに PNG 保存する（T013）。"""
+        if not self._current_video_path:
+            return
+        from datetime import datetime
+        from pathlib import Path
+        desktop = Path.home() / "Desktop"
+        save_dir = desktop if desktop.exists() else Path.home()
+        filename = f"LoopPlayer_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        path = save_dir / filename
+        self.media_player.video_take_snapshot(0, str(path), 0, 0)
+        self.statusBar().showMessage(f"保存しました: {path}", 3000)
+
+    def _speed_up(self):
+        """再生速度を1段階上げる（US1）。"""
+        idx = _PLAYBACK_RATES.index(self._playback_rate) if self._playback_rate in _PLAYBACK_RATES else -1
+        if idx < len(_PLAYBACK_RATES) - 1:
+            self._set_playback_rate(_PLAYBACK_RATES[idx + 1])
+        else:
+            self.statusBar().showMessage("最大速度です", 2000)
+
+    def _speed_down(self):
+        """再生速度を1段階下げる（US1）。"""
+        idx = _PLAYBACK_RATES.index(self._playback_rate) if self._playback_rate in _PLAYBACK_RATES else len(_PLAYBACK_RATES)
+        if idx > 0:
+            self._set_playback_rate(_PLAYBACK_RATES[idx - 1])
+        else:
+            self.statusBar().showMessage("最小速度です", 2000)
+
+    def _frame_forward(self):
+        """1フレーム進める（US1）。再生中は自動一時停止する。"""
+        if self.media_player.is_playing():
+            self.media_player.pause()
+        self.media_player.next_frame()
+
+    def _frame_backward(self):
+        """1フレーム戻る（US1）。再生中は自動一時停止する。"""
+        if self.media_player.is_playing():
+            self.media_player.pause()
+        fps = self.media_player.get_fps()
+        frame_ms = int(1000.0 / fps) if fps > 0 else 40  # フォールバック: 25fps
+        t = self.media_player.get_time()
+        self.media_player.set_time(max(0, t - frame_ms))
+
     # ── フルスクリーン操作 ────────────────────────────────────
 
     def toggle_fullscreen(self):
@@ -662,6 +881,7 @@ class VideoPlayer(QMainWindow):
             self.showFullScreen()
             self.controls_panel.hide()
             self.menuBar().hide()
+            self.statusBar().hide()
             self.video_frame.setMouseTracking(True)
             self.centralWidget().setMouseTracking(True)
             self.setMouseTracking(True)
@@ -678,6 +898,7 @@ class VideoPlayer(QMainWindow):
             self.showNormal()
             self.controls_panel.show()
             self.menuBar().show()
+            self.statusBar().show()
 
     def _hide_cursor(self) -> None:
         """US4: フルスクリーン中のみカーソルを非表示にする。"""
@@ -914,6 +1135,14 @@ class VideoPlayer(QMainWindow):
             ("Space", "再生 / 一時停止"),
             ("←", "5秒戻る"),
             ("→", "5秒進む"),
+            ("Shift+←", "-1秒シーク"),
+            ("Shift+→", "+1秒シーク"),
+            ("Ctrl+←", "-10秒シーク"),
+            ("Ctrl+→", "+10秒シーク"),
+            (",", "1フレーム戻る（自動一時停止）"),
+            (".", "1フレーム進む（自動一時停止）"),
+            ("[", "再生速度を下げる"),
+            ("]", "再生速度を上げる"),
         ]),
         ("音量操作", [
             ("↑", "音量を上げる (+10)"),
@@ -934,6 +1163,7 @@ class VideoPlayer(QMainWindow):
         ]),
         ("ファイル操作", [
             ("Ctrl+O", "ファイルを開く"),
+            ("Ctrl+Shift+S", "スクリーンショット保存"),
             ("Ctrl+Q", "終了"),
             ("?", "ショートカット一覧を表示"),
         ]),
@@ -1000,6 +1230,39 @@ class VideoPlayer(QMainWindow):
             if bm.id == bookmark_id:
                 self._on_bookmark_selected(bm)
                 break
+
+    # ── US4: 再生終了時の動作 ────────────────────────────────────
+
+    def _handle_playback_ended(self):
+        """US4: 再生終了時に設定に従って動作する。プレイリストがある場合は次へ進む。"""
+        # プレイリスト有効 → 次のファイルへ（US7）
+        if hasattr(self, "_playlist") and self._playlist and self._playlist.has_next():
+            self._playlist.advance()
+            self._open_path(str(self._playlist.current()))
+            return
+        # ABループ有効 → _on_timer が制御するため何もしない
+        if self.ab_loop_active:
+            return
+        action = self._app_settings.end_of_playback_action
+        if action == "rewind":
+            self.media_player.stop()
+            self.media_player.set_time(0)
+            self.seek_slider.setValue(0)
+            self.time_label.setText("00:00 / 00:00")
+        elif action == "loop":
+            self.media_player.stop()
+            self.media_player.play()
+        # "stop" は VLC が自動的に停止するため何もしない
+
+    def closeEvent(self, event):
+        """US5: アプリ終了時に現在の再生位置を保存する。"""
+        if self._current_video_path:
+            self._playback_position.save(
+                self._current_video_path,
+                self.media_player.get_time(),
+                self.media_player.get_length(),
+            )
+        super().closeEvent(event)
 
     # ── VLC エラーハンドリング ────────────────────────────────
 

@@ -21,6 +21,8 @@ class LoopBookmark:
     repeat_count: int = 1
     order: int = 0
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    enabled: bool = True  # 連続再生の対象かどうか（FR-006）
+    notes: str = ""  # ブックマークメモ（US6）
 
     def __post_init__(self) -> None:
         if self.repeat_count < 1:
@@ -34,6 +36,8 @@ class LoopBookmark:
             "point_b_ms": self.point_b_ms,
             "repeat_count": self.repeat_count,
             "order": self.order,
+            "enabled": self.enabled,
+            "notes": self.notes,
         }
 
     @classmethod
@@ -45,6 +49,8 @@ class LoopBookmark:
             repeat_count=d.get("repeat_count", 1),
             order=d.get("order", 0),
             id=d["id"],
+            enabled=d.get("enabled", True),  # 旧 JSON には enabled キーがないため True にフォールバック
+            notes=d.get("notes", ""),  # 旧 JSON には notes キーがないため "" にフォールバック
         )
 
 
@@ -159,6 +165,22 @@ class BookmarkStore:
         for b in self._data.get(video_path, []):
             if b.id == bookmark_id:
                 b.repeat_count = count
+                break
+        self._save_all()
+
+    def update_notes(self, video_path: str, bookmark_id: str, notes: str) -> None:
+        """ブックマークのメモを更新して永続化する（US6）。"""
+        for b in self._data.get(video_path, []):
+            if b.id == bookmark_id:
+                b.notes = notes
+                break
+        self._save_all()
+
+    def update_enabled(self, video_path: str, bookmark_id: str, enabled: bool) -> None:
+        """ブックマークの enabled フラグを更新して永続化する（FR-006/FR-009）。"""
+        for b in self._data.get(video_path, []):
+            if b.id == bookmark_id:
+                b.enabled = enabled
                 break
         self._save_all()
 
