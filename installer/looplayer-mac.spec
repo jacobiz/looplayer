@@ -31,6 +31,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
     name='LoopPlayer',
     debug=False,
@@ -43,16 +45,8 @@ exe = EXE(
     entitlements_file=None,
 )
 
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    name='LoopPlayer',
-)
-
 app = BUNDLE(
-    coll,
+    exe,
     name='LoopPlayer.app',
     icon=None,
     bundle_identifier='com.looplayer.app',
