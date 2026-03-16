@@ -1,8 +1,8 @@
-name: Build Windows App
+name: Windows ビルド確認
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -24,17 +24,11 @@ jobs:
         run: pip install -r requirements.txt pyinstaller
 
       - name: PyInstaller でビルド
-        run: |
-          $vlc = "C:\Program Files\VideoLAN\VLC"
-          pyinstaller --onefile --windowed --name VideoPlayer `
-            --add-binary "$vlc\libvlc.dll;." `
-            --add-binary "$vlc\libvlccore.dll;." `
-            --add-data "$vlc\plugins;plugins" `
-            main.py
+        run: pyinstaller installer/looplayer.spec
 
       - name: アーティファクトをアップロード
         uses: actions/upload-artifact@v4
         with:
-          name: VideoPlayer-Windows
-          path: dist/VideoPlayer.exe
+          name: LoopPlayer-Windows
+          path: dist/LoopPlayer.exe
           retention-days: 30
