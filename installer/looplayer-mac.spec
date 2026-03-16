@@ -38,7 +38,6 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    argv_emulation=True,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
@@ -57,4 +56,5 @@ app = BUNDLE(
     name='LoopPlayer.app',
     icon=None,
     bundle_identifier='com.looplayer.app',
+    argv_emulation=True,
 )
