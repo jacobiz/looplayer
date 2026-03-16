@@ -1,6 +1,6 @@
 # video-player Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-15
+Auto-generated from all feature plans. Last updated: 2026-03-16
 
 ## Active Technologies
 - Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存） (002-ab-loop-bookmarks)
@@ -8,6 +8,9 @@ Auto-generated from all feature plans. Last updated: 2026-03-15
 - N/A（状態はメモリのみ、音量・速度は永続化しない） (003-player-menus)
 - Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 + PyQt6（QDrag, QTimer, QCursor, QFileDialog, QAction）, python-vlc（MediaPlayerVideoChanged イベント） (004-player-ux)
 - `~/.looplayer/recent_files.json`（新規）, `~/.looplayer/bookmarks.json`（既存・変更なし） (004-player-ux)
+- `~/.looplayer/bookmarks.json`（既存・`enabled` フィールドを追加） (005-timeline-seq-info-help)
+- Python 3.12.13 + PyInstaller（バンドラー）、Inno Setup（インストーラフレームワーク）、既存の PyQt6 6.10.2 + python-vlc 3.0.21203 (006-windows-installer)
+- N/A（インストーラはビルド成果物） (006-windows-installer)
 
 - Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 (001-video-player-core)
 
@@ -42,9 +45,9 @@ pytest tests/unit/ -v   # ユニットテストのみ
 Python 3.12.13: Follow standard conventions
 
 ## Recent Changes
+- 006-windows-installer: Added Python 3.12.13 + PyInstaller（バンドラー）、Inno Setup（インストーラフレームワーク）、既存の PyQt6 6.10.2 + python-vlc 3.0.21203
+- 005-timeline-seq-info-help: Added Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203
 - 004-player-ux: Added Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 + PyQt6（QDrag, QTimer, QCursor, QFileDialog, QAction）, python-vlc（MediaPlayerVideoChanged イベント）
-- 003-player-menus: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）
-- 002-ab-loop-bookmarks: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）
 
 
 <!-- MANUAL ADDITIONS START -->

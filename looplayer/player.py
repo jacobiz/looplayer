@@ -2,6 +2,12 @@
 import os
 import sys
 import vlc
+
+# バンドルされた exe 実行時に VLC プラグインパスを設定
+if getattr(sys, 'frozen', False):
+    _vlc_plugins = os.path.join(sys._MEIPASS, 'plugins')
+    if os.path.exists(_vlc_plugins):
+        os.environ['VLC_PLUGIN_PATH'] = _vlc_plugins
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QSlider, QLabel, QFileDialog, QMessageBox,
@@ -14,7 +20,13 @@ from looplayer.bookmark_store import BookmarkStore, LoopBookmark
 from looplayer.recent_files import RecentFiles
 from looplayer.sequential import SequentialPlayState
 from looplayer.utils import ms_to_str
+from looplayer.version import APP_NAME, VERSION
 from looplayer.widgets.bookmark_panel import BookmarkPanel
+from looplayer.widgets.bookmark_slider import BookmarkSlider
+
+# US3: 動画情報ダイアログ、US4: ショートカットダイアログで使用
+from PyQt6.QtWidgets import QDialog, QGridLayout, QDialogButtonBox, QScrollArea
+from PyQt6.QtGui import QShortcut
 
 
 class VideoPlayer(QMainWindow):
@@ -25,7 +37,7 @@ class VideoPlayer(QMainWindow):
 
     def __init__(self, store: BookmarkStore | None = None, recent_storage=None):
         super().__init__()
-        self.setWindowTitle("Video Player")
+        self.setWindowTitle(f"{APP_NAME} {VERSION}")
         self.setMinimumSize(800, 600)
 
         self.instance = vlc.Instance()
@@ -119,12 +131,13 @@ class VideoPlayer(QMainWindow):
         volume_bar.addStretch()
         controls_layout.addLayout(volume_bar)
 
-        # Seek bar
+        # Seek bar（BookmarkSlider でブックマーク区間を重ね描きする）
         seek_layout = QHBoxLayout()
         self.time_label = QLabel("00:00 / 00:00")
-        self.seek_slider = QSlider(Qt.Orientation.Horizontal)
+        self.seek_slider = BookmarkSlider(Qt.Orientation.Horizontal)
         self.seek_slider.setRange(0, 1000)
         self.seek_slider.sliderMoved.connect(self._on_seek)
+        self.seek_slider.bookmark_bar_clicked.connect(self._on_bookmark_bar_clicked)
         seek_layout.addWidget(self.seek_slider)
         seek_layout.addWidget(self.time_label)
         controls_layout.addLayout(seek_layout)
@@ -189,6 +202,14 @@ class VideoPlayer(QMainWindow):
         open_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
+
+        # US3: 動画情報（動画未選択時は無効）
+        self._video_info_action = QAction("動画情報...", self)
+        self._video_info_action.setEnabled(False)
+        self._video_info_action.triggered.connect(self._show_video_info)
+        file_menu.addAction(self._video_info_action)
+
+        file_menu.addSeparator()
 
         # US2: 最近開いたファイル サブメニュー
         self._recent_menu = file_menu.addMenu("最近開いたファイル(&R)")
@@ -315,6 +336,18 @@ class VideoPlayer(QMainWindow):
         seek_fwd_action.triggered.connect(lambda: self._seek_relative(5000))
         self.addAction(seek_fwd_action)
 
+        # ── ヘルプメニュー ──────────────────────────────────────
+        help_menu = self.menuBar().addMenu("ヘルプ(&H)")
+
+        shortcut_list_action = QAction("ショートカット一覧", self)
+        shortcut_list_action.triggered.connect(self._show_shortcut_dialog)
+        help_menu.addAction(shortcut_list_action)
+
+        # US4: ? キーでショートカット一覧を表示（ApplicationShortcut コンテキスト）
+        self._shortcut_dialog_key = QShortcut(QKeySequence("?"), self)
+        self._shortcut_dialog_key.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._shortcut_dialog_key.activated.connect(self._show_shortcut_dialog)
+
         # フルスクリーン中のメニューバー自動非表示タイマー
         self._menu_hide_timer = QTimer(self)
         self._menu_hide_timer.setSingleShot(True)
@@ -368,6 +401,12 @@ class VideoPlayer(QMainWindow):
 
         # US6: 動画を開いたらエクスポートを有効化
         self._export_action.setEnabled(True)
+
+        # US3: 動画を開いたら動画情報を有効化
+        self._video_info_action.setEnabled(True)
+
+        # US1: タイムラインバーを更新
+        self._sync_slider_bookmarks()
 
     def _rebuild_recent_menu(self) -> None:
         """US2: 最近開いたファイルメニューを再構築する。"""
@@ -434,12 +473,14 @@ class VideoPlayer(QMainWindow):
                     point_b_ms=bm_dict["point_b_ms"],
                     name=bm_dict.get("name", ""),
                     repeat_count=bm_dict.get("repeat_count", 1),
+                    enabled=bm_dict.get("enabled", True),
                 )
                 self._store.add(self._current_video_path, new_bm)
                 existing_pairs.add(pair)
             except ValueError:
                 continue  # 不正なブックマーク（A >= B など）はスキップ
         self.bookmark_panel._refresh_list()
+        self._sync_slider_bookmarks()
 
     # ── US3: ウィンドウリサイズ ──────────────────────────────
 
@@ -550,6 +591,8 @@ class VideoPlayer(QMainWindow):
                     next_a = self._seq_state.on_b_reached()
                     self.media_player.set_time(next_a)
                     self.bookmark_panel.update_seq_status(self._seq_state)
+                    # US1 T017: ブックマーク遷移時にスライダーの強調表示を更新
+                    self._sync_slider_bookmarks()
             return
 
         # 通常 AB ループチェック
@@ -727,6 +770,7 @@ class VideoPlayer(QMainWindow):
         video_length_ms = self.media_player.get_length()
         try:
             self.bookmark_panel.add_bookmark(bm, video_length_ms)
+            self._sync_slider_bookmarks()
         except ValueError as e:
             QMessageBox.warning(self, "ブックマーク保存エラー", str(e))
 
@@ -746,6 +790,7 @@ class VideoPlayer(QMainWindow):
         if not self.media_player.is_playing():
             self.media_player.play()
             self.play_btn.setText("一時停止")
+        self._sync_slider_bookmarks()
 
     # ── 連続再生操作 ──────────────────────────────────────────
 
@@ -761,12 +806,200 @@ class VideoPlayer(QMainWindow):
         if not self.media_player.is_playing():
             self.media_player.play()
             self.play_btn.setText("一時停止")
+        self._sync_slider_bookmarks()
 
     def _on_sequential_stopped(self):
         """連続再生を停止して通常再生モードに戻る。"""
         if self._seq_state:
             self._seq_state.stop()
         self._seq_state = None
+        self._sync_slider_bookmarks()
+
+    # ── US3: 動画情報ダイアログ ──────────────────────────────────
+
+    @staticmethod
+    def _format_file_size(size_bytes: int) -> str:
+        """ファイルサイズをバイト→人間可読形式に変換する（FR-013）。"""
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        if size_bytes < 1024 ** 2:
+            return f"{size_bytes / 1024:.1f} KB"
+        if size_bytes < 1024 ** 3:
+            return f"{size_bytes / 1024 ** 2:.1f} MB"
+        return f"{size_bytes / 1024 ** 3:.2f} GB"
+
+    def _show_video_info(self) -> None:
+        """US3: 動画情報ダイアログを表示する（FR-013）。"""
+        if self._current_video_path is None:
+            return
+
+        # ── ファイル情報 ──
+        filename = os.path.basename(self._current_video_path)
+        try:
+            size_str = self._format_file_size(os.path.getsize(self._current_video_path))
+        except OSError:
+            size_str = "不明"
+
+        length_ms = self.media_player.get_length()
+        length_str = ms_to_str(length_ms) if length_ms > 0 else "不明"
+
+        # ── VLC トラック情報 ──
+        resolution_str = "不明"
+        fps_str = "不明"
+        video_codec_str = "不明"
+        audio_codec_str = "不明"
+
+        media = self.media_player.get_media()
+        if media is not None:
+            media.parse()
+            tracks = media.tracks_get()
+            if tracks:
+                for track in tracks:
+                    if track.type == vlc.TrackType.Video and resolution_str == "不明":
+                        v = track.video.contents if track.video else None
+                        if v:
+                            if v.width and v.height:
+                                resolution_str = f"{v.width} × {v.height}"
+                            if v.frame_rate_num and v.frame_rate_den:
+                                fps_val = v.frame_rate_num / v.frame_rate_den
+                                fps_str = f"{fps_val:.2f}"
+                        if track.codec:
+                            desc = vlc.libvlc_media_get_codec_description(
+                                vlc.TrackType.Video, track.codec
+                            )
+                            video_codec_str = desc if desc else "不明"
+                    elif track.type == vlc.TrackType.Audio and audio_codec_str == "不明":
+                        if track.codec:
+                            desc = vlc.libvlc_media_get_codec_description(
+                                vlc.TrackType.Audio, track.codec
+                            )
+                            audio_codec_str = desc if desc else "不明"
+
+        # ── ダイアログ構築 ──
+        dialog = QDialog(self)
+        dialog.setWindowTitle("動画情報")
+        dialog.setMinimumWidth(400)
+        grid = QGridLayout(dialog)
+        grid.setColumnMinimumWidth(0, 120)
+        grid.setSpacing(6)
+
+        rows = [
+            ("ファイル名", filename),
+            ("ファイルサイズ", size_str),
+            ("再生時間", length_str),
+            ("解像度", resolution_str),
+            ("フレームレート", fps_str),
+            ("映像コーデック", video_codec_str),
+            ("音声コーデック", audio_codec_str),
+        ]
+        for row_idx, (key, value) in enumerate(rows):
+            key_label = QLabel(key + ":")
+            key_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            val_label = QLabel(value)
+            val_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            grid.addWidget(key_label, row_idx, 0)
+            grid.addWidget(val_label, row_idx, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        grid.addWidget(buttons, len(rows), 0, 1, 2)
+
+        dialog.exec()
+
+    # ── US4: ショートカット一覧ダイアログ ──────────────────────────
+
+    # 全ショートカット定義（6カテゴリ）
+    _SHORTCUTS = [
+        ("再生操作", [
+            ("Space", "再生 / 一時停止"),
+            ("←", "5秒戻る"),
+            ("→", "5秒進む"),
+        ]),
+        ("音量操作", [
+            ("↑", "音量を上げる (+10)"),
+            ("↓", "音量を下げる (−10)"),
+            ("M", "ミュート切り替え"),
+        ]),
+        ("AB ループ操作", [
+            ("A点セット", "ボタンクリックで A 点を設定"),
+            ("B点セット", "ボタンクリックで B 点を設定"),
+        ]),
+        ("ブックマーク操作", [
+            ("ブックマーク保存", "ボタンクリックで現在の AB 区間を保存"),
+            ("Ctrl+Z", "ブックマーク削除を元に戻す（5 秒以内）"),
+        ]),
+        ("表示操作", [
+            ("F", "フルスクリーン 切り替え"),
+            ("Escape", "フルスクリーン 解除"),
+        ]),
+        ("ファイル操作", [
+            ("Ctrl+O", "ファイルを開く"),
+            ("Ctrl+Q", "終了"),
+            ("?", "ショートカット一覧を表示"),
+        ]),
+    ]
+
+    def _show_shortcut_dialog(self) -> None:
+        """US4: ショートカット一覧ダイアログを表示する（FR-014）。"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("キーボードショートカット一覧")
+        dialog.setMinimumWidth(420)
+
+        outer = QVBoxLayout(dialog)
+
+        grid_widget = QWidget()
+        grid = QGridLayout(grid_widget)
+        grid.setSpacing(4)
+        grid.setColumnMinimumWidth(0, 160)
+        grid.setColumnMinimumWidth(1, 200)
+
+        row = 0
+        for category, entries in self._SHORTCUTS:
+            cat_label = QLabel(f"【{category}】")
+            cat_label.setStyleSheet("font-weight: bold; margin-top: 6px;")
+            grid.addWidget(cat_label, row, 0, 1, 2)
+            row += 1
+            for key, desc in entries:
+                key_label = QLabel(key)
+                key_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                key_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                desc_label = QLabel(desc)
+                desc_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                grid.addWidget(key_label, row, 0)
+                grid.addWidget(desc_label, row, 1)
+                row += 1
+
+        scroll = QScrollArea()
+        scroll.setWidget(grid_widget)
+        scroll.setWidgetResizable(True)
+        outer.addWidget(scroll)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        outer.addWidget(buttons)
+
+        dialog.exec()
+
+    # ── US1: タイムライン同期 ────────────────────────────────────
+
+    def _sync_slider_bookmarks(self) -> None:
+        """US1: スライダーのブックマークバーを現在の動画・連続再生状態に合わせて更新する。"""
+        if self._current_video_path is None:
+            self.seek_slider.set_bookmarks([], 0)
+            return
+        bms = self._store.get_bookmarks(self._current_video_path)
+        duration_ms = self.media_player.get_length()
+        current_id = self._seq_state.current_bookmark.id if (self._seq_state and self._seq_state.active) else None
+        self.seek_slider.set_bookmarks(bms, duration_ms, current_id)
+
+    def _on_bookmark_bar_clicked(self, bookmark_id: str) -> None:
+        """US1: スライダー上のブックマークバーをクリックしたときに該当ブックマークを選択する。"""
+        if self._current_video_path is None:
+            return
+        for bm in self._store.get_bookmarks(self._current_video_path):
+            if bm.id == bookmark_id:
+                self._on_bookmark_selected(bm)
+                break
 
     # ── VLC エラーハンドリング ────────────────────────────────
 

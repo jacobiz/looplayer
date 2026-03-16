@@ -1,0 +1,61 @@
+name: リリース
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: VLC・Inno Setup・依存パッケージのインストール
+        run: |
+          choco install vlc --yes --no-progress
+          choco install innosetup --yes --no-progress
+          pip install -r requirements.txt pyinstaller
+
+      - name: バージョン番号を取得
+        id: version
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: PyInstaller でバンドル
+        run: pyinstaller installer/looplayer.spec
+
+      - name: Inno Setup でインストーラを作成
+        run: iscc /DAppVersion=${{ steps.version.outputs.VERSION }} installer/looplayer.iss
+
+      - name: SHA256 チェックサムを生成
+        run: |
+          $ver = "${{ steps.version.outputs.VERSION }}"
+          $path = "dist\LoopPlayer-Setup-$ver.exe"
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash
+          "SHA256: $hash  LoopPlayer-Setup-$ver.exe" | Out-File dist\SHA256SUMS.txt -Encoding UTF8
+
+          # SC-002: ファイルサイズ確認
+          $sizeMB = [math]::Round((Get-Item $path).Length / 1MB, 1)
+          Write-Host "インストーラサイズ: ${sizeMB} MB"
+          if ($sizeMB -gt 200) {
+            Write-Warning "インストーラが 200MB を超えています (${sizeMB} MB)"
+          }
+
+      - name: GitHub Releases に公開
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = "${{ steps.version.outputs.VERSION }}"
+          gh release create ${{ github.ref_name }} `
+            "dist\LoopPlayer-Setup-$ver.exe#LoopPlayer インストーラ (Windows)" `
+            "dist\SHA256SUMS.txt#SHA256 チェックサム" `
+            --title "LoopPlayer ${{ github.ref_name }}" `
+            --generate-release-notes
