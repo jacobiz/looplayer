@@ -113,3 +113,60 @@ class TestImportBookmarks:
         dest.write_text(json.dumps(data))
         with pytest.raises(ValueError):
             import_bookmarks(str(dest))
+
+
+class TestEnabledFieldIO:
+    """T029: enabled フィールドのエクスポート/インポートテスト。"""
+
+    def test_export_includes_enabled_field(self, tmp_path):
+        """export_bookmarks が enabled フィールドを含むこと。"""
+        bm = LoopBookmark(point_a_ms=1000, point_b_ms=5000, enabled=True)
+        dest = tmp_path / "export_enabled.json"
+        export_bookmarks([bm], str(dest))
+        data = json.loads(dest.read_text())
+        assert "enabled" in data["bookmarks"][0]
+
+    def test_export_enabled_true(self, tmp_path):
+        bm = LoopBookmark(point_a_ms=1000, point_b_ms=5000, enabled=True)
+        dest = tmp_path / "export_enabled.json"
+        export_bookmarks([bm], str(dest))
+        data = json.loads(dest.read_text())
+        assert data["bookmarks"][0]["enabled"] is True
+
+    def test_export_enabled_false(self, tmp_path):
+        bm = LoopBookmark(point_a_ms=1000, point_b_ms=5000, enabled=False)
+        dest = tmp_path / "export_disabled.json"
+        export_bookmarks([bm], str(dest))
+        data = json.loads(dest.read_text())
+        assert data["bookmarks"][0]["enabled"] is False
+
+    def test_import_preserves_enabled_true(self, tmp_path):
+        """import_bookmarks が enabled=True を正しく読み込むこと。"""
+        bm = LoopBookmark(point_a_ms=1000, point_b_ms=5000, enabled=True)
+        dest = tmp_path / "round_trip.json"
+        export_bookmarks([bm], str(dest))
+        result = import_bookmarks(str(dest))
+        assert result[0].get("enabled") is True
+
+    def test_import_preserves_enabled_false(self, tmp_path):
+        """import_bookmarks が enabled=False を正しく読み込むこと。"""
+        bm = LoopBookmark(point_a_ms=1000, point_b_ms=5000, enabled=False)
+        dest = tmp_path / "round_trip_false.json"
+        export_bookmarks([bm], str(dest))
+        result = import_bookmarks(str(dest))
+        assert result[0].get("enabled") is False
+
+    def test_import_defaults_enabled_to_true_when_missing(self, tmp_path):
+        """enabled フィールドがない旧フォーマットは enabled=True としてインポートされること。"""
+        data = {
+            "version": 1,
+            "exported_at": "2026-01-01T00:00:00+00:00",
+            "bookmarks": [
+                {"name": "test", "point_a_ms": 1000, "point_b_ms": 5000,
+                 "repeat_count": 1, "order": 0}
+            ]
+        }
+        dest = tmp_path / "old_format.json"
+        dest.write_text(json.dumps(data))
+        result = import_bookmarks(str(dest))
+        assert result[0].get("enabled", True) is True

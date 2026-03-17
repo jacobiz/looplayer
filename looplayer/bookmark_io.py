@@ -22,6 +22,8 @@ def export_bookmarks(bookmarks: list, dest_path: str) -> None:
                 "point_b_ms": bm.point_b_ms,
                 "repeat_count": bm.repeat_count,
                 "order": bm.order,
+                "enabled": bm.enabled,
+                "notes": bm.notes,
             }
             for bm in bookmarks
         ],
@@ -57,6 +59,8 @@ def import_bookmarks(src_path: str) -> list[dict]:
                 "point_b_ms": int(raw["point_b_ms"]),
                 "repeat_count": int(raw.get("repeat_count", 1)),
                 "order": int(raw.get("order", 0)),
+                "enabled": bool(raw.get("enabled", True)),
+                "notes": str(raw.get("notes", "")),
             }
         except (KeyError, TypeError, ValueError) as e:
             raise ValueError(f"ブックマークデータが不正です: {e}") from e

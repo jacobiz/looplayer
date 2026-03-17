@@ -1,11 +1,12 @@
 """BookmarkPanel: ブックマーク一覧パネルウィジェット。"""
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QAbstractItemView,
+    QListWidget, QListWidgetItem, QAbstractItemView, QInputDialog,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
+from looplayer.i18n import t
 from looplayer.sequential import SequentialPlayState
 from looplayer.widgets.bookmark_row import BookmarkRow
 
@@ -38,9 +39,9 @@ class BookmarkPanel(QWidget):
 
         # ── ヘッダー行 ──
         header = QHBoxLayout()
-        header.addWidget(QLabel("ブックマーク一覧"))
+        header.addWidget(QLabel(t("bookmark.panel.title")))
         header.addStretch()
-        self.seq_btn = QPushButton("連続再生")
+        self.seq_btn = QPushButton(t("bookmark.panel.seq_play"))
         self.seq_btn.setCheckable(True)
         self.seq_btn.setEnabled(False)
         self.seq_btn.clicked.connect(self._on_seq_btn)
@@ -87,7 +88,7 @@ class BookmarkPanel(QWidget):
             return
         cur = state.current_bookmark.name
         nxt = state.next_bookmark_name
-        self.seq_status_label.setText(f"▶ 現在: {cur}  →  次: {nxt}")
+        self.seq_status_label.setText(t("bookmark.panel.seq_status").format(cur=cur, nxt=nxt))
         self.seq_status_label.show()
 
     def stop_sequential(self) -> None:
@@ -95,7 +96,7 @@ class BookmarkPanel(QWidget):
         self._seq_active = False
         self.seq_status_label.hide()
         self.seq_btn.setChecked(False)
-        self.seq_btn.setText("連続再生")
+        self.seq_btn.setText(t("bookmark.panel.seq_play"))
 
     # ── 内部処理 ────────────────────────────────────────────
 
@@ -110,11 +111,14 @@ class BookmarkPanel(QWidget):
             row.deleted.connect(self._on_delete)
             row.repeat_changed.connect(self._on_repeat_changed)
             row.name_changed.connect(self._on_name_changed)
+            row.enabled_changed.connect(self._on_enabled_changed)  # FR-006
+            row.memo_clicked.connect(self._on_memo_clicked)  # US6
             item.setSizeHint(row.sizeHint())
             item.setData(Qt.ItemDataRole.UserRole, bm.id)
             self.list_widget.addItem(item)
             self.list_widget.setItemWidget(item, row)
-        self.seq_btn.setEnabled(len(bms) > 0)
+        # FR-008: チェック済みが1件以上ある場合のみ連続再生ボタンを有効化
+        self.seq_btn.setEnabled(any(bm.enabled for bm in bms))
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         if self._video_path is None:
@@ -169,6 +173,14 @@ class BookmarkPanel(QWidget):
         """US5: _undo_delete の公開インターフェース（player.py から呼ぶ用）。"""
         self._undo_delete()
 
+    def _on_enabled_changed(self, bookmark_id: str, enabled: bool) -> None:
+        """FR-006/FR-009: チェックボックス変更時に enabled を永続化し、seq_btn の有効状態を更新する。"""
+        if self._video_path is None:
+            return
+        self._store.update_enabled(self._video_path, bookmark_id, enabled)
+        bms = self._store.get_bookmarks(self._video_path)
+        self.seq_btn.setEnabled(any(bm.enabled for bm in bms))
+
     def _on_repeat_changed(self, bookmark_id: str, count: int) -> None:
         if self._video_path is None:
             return
@@ -178,6 +190,28 @@ class BookmarkPanel(QWidget):
         if self._video_path is None:
             return
         self._store.update_name(self._video_path, bookmark_id, new_name)
+
+    def _on_memo_clicked(self, bookmark_id: str) -> None:
+        """US6: メモボタンクリック時にメモ入力ダイアログを表示して保存する。"""
+        if self._video_path is None:
+            return
+        bms = self._store.get_bookmarks(self._video_path)
+        bm = next((b for b in bms if b.id == bookmark_id), None)
+        if bm is None:
+            return
+        text, ok = QInputDialog.getMultiLineText(
+            self, t("bookmark.memo.title"), t("bookmark.memo.prompt").format(name=bm.name), bm.notes
+        )
+        if ok:
+            self._store.update_notes(self._video_path, bookmark_id, text)
+            # リスト内の対応する BookmarkRow のスタイルを更新
+            for i in range(self.list_widget.count()):
+                item = self.list_widget.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) == bookmark_id:
+                    row = self.list_widget.itemWidget(item)
+                    if hasattr(row, "update_notes"):
+                        row.update_notes(text)
+                    break
 
     def _on_rows_moved(self, *_) -> None:
         """ドラッグ＆ドロップ後に並び順を永続化する（FR-009）。"""
@@ -203,8 +237,14 @@ class BookmarkPanel(QWidget):
             self.seq_btn.setChecked(False)
             return
 
+        # FR-006: チェック済みのブックマークのみを連続再生対象とする
+        enabled_bms = [bm for bm in bms if bm.enabled]
+        if not enabled_bms:
+            self.seq_btn.setChecked(False)
+            return
+
         self._seq_active = True
-        self.seq_btn.setText("連続再生 停止")
-        state = SequentialPlayState(bookmarks=bms)
+        self.seq_btn.setText(t("bookmark.panel.seq_stop"))
+        state = SequentialPlayState(bookmarks=enabled_bms)
         self.update_seq_status(state)
         self.sequential_started.emit(state)

@@ -7,6 +7,7 @@ import pytest
 from pytestqt.qtbot import QtBot
 
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
+from looplayer.i18n import t as _t
 from looplayer.player import VideoPlayer
 
 
@@ -41,19 +42,20 @@ class TestExportMenuAction:
     def test_export_action_exists(self, player):
         file_menu = _get_file_menu(player)
         texts = [a.text() for a in file_menu.actions()]
-        assert any("エクスポート" in t for t in texts)
+        export_text = _t("menu.file.export")
+        assert any(export_text in txt for txt in texts)
 
     def test_export_action_disabled_without_video(self, player):
         """動画未選択時はエクスポートメニューが無効。"""
         file_menu = _get_file_menu(player)
-        export_action = next((a for a in file_menu.actions() if "エクスポート" in a.text()), None)
+        export_action = next((a for a in file_menu.actions() if _t("menu.file.export") in a.text()), None)
         assert export_action is not None
         assert not export_action.isEnabled()
 
     def test_export_action_enabled_with_video(self, player_with_video):
         player, video, bm1, bm2 = player_with_video
         file_menu = _get_file_menu(player)
-        export_action = next((a for a in file_menu.actions() if "エクスポート" in a.text()), None)
+        export_action = next((a for a in file_menu.actions() if _t("menu.file.export") in a.text()), None)
         assert export_action is not None
         assert export_action.isEnabled()
 
@@ -64,7 +66,8 @@ class TestImportMenuAction:
     def test_import_action_exists(self, player):
         file_menu = _get_file_menu(player)
         texts = [a.text() for a in file_menu.actions()]
-        assert any("インポート" in t for t in texts)
+        import_text = _t("menu.file.import")
+        assert any(import_text in txt for txt in texts)
 
 
 class TestExportBookmarks:
@@ -123,7 +126,8 @@ class TestImportBookmarks:
 
 
 def _get_file_menu(player):
+    file_title = _t("menu.file").replace("&", "")
     for action in player.menuBar().actions():
-        if "ファイル" in action.text():
+        if file_title in action.text().replace("&", ""):
             return action.menu()
     return None

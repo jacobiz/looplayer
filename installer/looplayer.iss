@@ -58,7 +58,7 @@ Name: "{group}\LoopPlayer"; Filename: "{app}\LoopPlayer.exe"
 Name: "{commondesktop}\LoopPlayer"; Filename: "{app}\LoopPlayer.exe"; Tasks: desktopicon
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Run]
 ; インストール完了後に起動するオプション

@@ -1,5 +1,6 @@
 """ABループ操作フローの統合テスト。"""
 from unittest.mock import patch
+from looplayer.i18n import t
 from looplayer.player import VideoPlayer
 
 
@@ -31,7 +32,7 @@ def test_both_points_ui_display(player: VideoPlayer):
 def test_toggle_ab_loop_on(player: VideoPlayer):
     """toggle_ab_loop(True) でボタンラベルが「ABループ: ON」になりフラグがセットされる。"""
     player.toggle_ab_loop(True)
-    assert player.ab_toggle_btn.text() == "ABループ: ON"
+    assert player.ab_toggle_btn.text() == t("btn.ab_loop_on")
     assert player.ab_loop_active is True
     assert player.ab_toggle_btn.isChecked()
 
@@ -40,7 +41,7 @@ def test_toggle_ab_loop_off(player: VideoPlayer):
     """toggle_ab_loop(False) でボタンラベルが「ABループ: OFF」になりフラグが解除される。"""
     player.toggle_ab_loop(True)
     player.toggle_ab_loop(False)
-    assert player.ab_toggle_btn.text() == "ABループ: OFF"
+    assert player.ab_toggle_btn.text() == t("btn.ab_loop_off")
     assert player.ab_loop_active is False
     assert not player.ab_toggle_btn.isChecked()
 
@@ -58,7 +59,7 @@ def test_reset_ab_clears_all_state(player: VideoPlayer):
     assert player.ab_point_a is None
     assert player.ab_point_b is None
     assert player.ab_loop_active is False
-    assert player.ab_toggle_btn.text() == "ABループ: OFF"
+    assert player.ab_toggle_btn.text() == t("btn.ab_loop_off")
     assert not player.ab_toggle_btn.isChecked()
     assert player.ab_info_label.text() == "A: --  B: --"
 

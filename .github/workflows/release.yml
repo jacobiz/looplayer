@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  build-and-release:
+  build-windows:
     runs-on: windows-latest
 
     steps:
@@ -40,7 +40,7 @@ jobs:
           $ver = "${{ steps.version.outputs.VERSION }}"
           $path = "dist\LoopPlayer-Setup-$ver.exe"
           $hash = (Get-FileHash $path -Algorithm SHA256).Hash
-          "SHA256: $hash  LoopPlayer-Setup-$ver.exe" | Out-File dist\SHA256SUMS.txt -Encoding UTF8
+          "SHA256: $hash  LoopPlayer-Setup-$ver.exe" | Out-File dist\SHA256SUMS-windows.txt -Encoding UTF8
 
           # SC-002: ファイルサイズ確認
           $sizeMB = [math]::Round((Get-Item $path).Length / 1MB, 1)
@@ -49,13 +49,102 @@ jobs:
             Write-Warning "インストーラが 200MB を超えています (${sizeMB} MB)"
           }
 
+      - name: アーティファクトをアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            dist/LoopPlayer-Setup-${{ steps.version.outputs.VERSION }}.exe
+            dist/SHA256SUMS-windows.txt
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: VLC・create-dmg・依存パッケージのインストール
+        run: |
+          brew install --cask vlc
+          brew install create-dmg
+          pip install -r requirements.txt pyinstaller
+
+      - name: バージョン番号を取得
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: PyInstaller でバンドル
+        run: pyinstaller installer/looplayer-mac.spec
+
+      - name: DMG を作成
+        run: |
+          VER=${{ steps.version.outputs.VERSION }}
+          create-dmg \
+            --volname "LoopPlayer" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --app-drop-link 450 185 \
+            "dist/LoopPlayer-$VER.dmg" \
+            "dist/LoopPlayer.app"
+
+      - name: SHA256 チェックサムを生成
+        run: |
+          VER=${{ steps.version.outputs.VERSION }}
+          shasum -a 256 "dist/LoopPlayer-$VER.dmg" | sed 's|dist/||' > dist/SHA256SUMS-macos.txt
+          SIZE=$(du -m "dist/LoopPlayer-$VER.dmg" | cut -f1)
+          echo "DMG サイズ: ${SIZE} MB"
+
+      - name: アーティファクトをアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: |
+            dist/LoopPlayer-${{ steps.version.outputs.VERSION }}.dmg
+            dist/SHA256SUMS-macos.txt
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: バージョン番号を取得
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Windows アーティファクトをダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/
+
+      - name: macOS アーティファクトをダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/
+
+      - name: SHA256SUMS を結合
+        run: cat dist/SHA256SUMS-windows.txt dist/SHA256SUMS-macos.txt > dist/SHA256SUMS.txt
+
       - name: GitHub Releases に公開
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $ver = "${{ steps.version.outputs.VERSION }}"
-          gh release create ${{ github.ref_name }} `
-            "dist\LoopPlayer-Setup-$ver.exe#LoopPlayer インストーラ (Windows)" `
-            "dist\SHA256SUMS.txt#SHA256 チェックサム" `
-            --title "LoopPlayer ${{ github.ref_name }}" `
-            --generate-release-notes
+          VER=${{ steps.version.outputs.VERSION }}
+          gh release create ${{ github.ref_name }} \
+            "dist/LoopPlayer-Setup-$VER.exe#LoopPlayer インストーラ (Windows)" \
+            "dist/LoopPlayer-$VER.dmg#LoopPlayer ディスクイメージ (macOS)" \
+            "dist/SHA256SUMS.txt#SHA256 チェックサム" \
+            --title "LoopPlayer ${{ github.ref_name }}" \
+            --generate-notes \
+            --repo ${{ github.repository }}
