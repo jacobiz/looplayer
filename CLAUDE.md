@@ -1,44 +1,49 @@
 # video-player Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-17
+## Tech Stack
 
-## Active Technologies
-- Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存） (002-ab-loop-bookmarks)
-- `~/.looplayer/bookmarks.json`（ローカルJSONファイル、追加ライブラリなし） (002-ab-loop-bookmarks)
-- N/A（状態はメモリのみ、音量・速度は永続化しない） (003-player-menus)
-- Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 + PyQt6（QDrag, QTimer, QCursor, QFileDialog, QAction）, python-vlc（MediaPlayerVideoChanged イベント） (004-player-ux)
-- `~/.looplayer/recent_files.json`（新規）, `~/.looplayer/bookmarks.json`（既存・変更なし） (004-player-ux)
-- `~/.looplayer/bookmarks.json`（既存・`enabled` フィールドを追加） (005-timeline-seq-info-help)
-- Python 3.12.13 + PyInstaller（バンドラー）、Inno Setup（インストーラフレームワーク）、既存の PyQt6 6.10.2 + python-vlc 3.0.21203 (006-windows-installer)
-- N/A（インストーラはビルド成果物） (006-windows-installer)
-- `~/.looplayer/positions.json`（新規）、`~/.looplayer/settings.json`（新規）、既存の `bookmarks.json`・`recent_files.json` は変更なし (007-player-enhancements)
-- N/A（永続データなし） (008-seekbar-click-seek)
-- Python 3.12.13 + PyQt6 6.10.2（`QLocale.system()` でロケール検出） (009-english-ui)
-- N/A（言語はメモリ内で決定。永続化なし） (009-english-ui)
-- Python 3.12.13 + PyQt6 6.10.2（既存）、`urllib.request`（標準ライブラリ）、`tempfile`（標準ライブラリ） (010-auto-update)
-- `~/.looplayer/settings.json`（既存・`check_update_on_startup` フィールドを追加） (010-auto-update)
-- Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）、ffmpeg（外部依存・PATH 検索） (011-clip-export)
-- N/A（出力はユーザー指定パス、アプリ設定への変更なし） (011-clip-export)
-
-- Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 (001-video-player-core)
+- Python 3.12.13
+- PyQt6 6.10.2
+- python-vlc 3.0.21203
+- ffmpeg（外部依存・クリップ書き出し時のみ必須、PATH に通っていること）
 
 ## Project Structure
 
 ```text
-looplayer/              # アプリパッケージ
-├── __init__.py
-├── bookmark_store.py   # LoopBookmark + BookmarkStore（JSON永続化）
-├── sequential.py       # SequentialPlayState（連続再生状態管理）
-├── utils.py            # _ms_to_str ユーティリティ
-├── widgets/
-│   ├── bookmark_row.py    # BookmarkRow ウィジェット
-│   └── bookmark_panel.py  # BookmarkPanel ウィジェット
-└── player.py           # VideoPlayer + main()
-main.py                 # エントリーポイント
+looplayer/
+├── player.py              # メインウィンドウ (VideoPlayer)
+├── bookmark_store.py      # LoopBookmark + BookmarkStore（JSON永続化）
+├── bookmark_io.py         # ブックマーク export/import
+├── clip_export.py         # ClipExportJob + ExportWorker（ffmpeg 書き出し）
+├── app_settings.py        # アプリ設定（再生終了動作など）
+├── playback_position.py   # 再生位置の記憶
+├── playlist.py            # プレイリスト（フォルダドロップ）
+├── sequential.py          # SequentialPlayState（連続再生状態管理）
+├── recent_files.py        # 最近のファイル管理
+├── updater.py             # 自動アップデート確認
+├── i18n.py                # UI 文字列（日本語/英語）
+├── utils.py               # ユーティリティ
+├── version.py             # バージョン定義
+└── widgets/
+    ├── bookmark_panel.py  # ブックマークリストパネル
+    ├── bookmark_row.py    # ブックマーク行ウィジェット
+    ├── bookmark_slider.py # タイムライン可視化
+    └── export_dialog.py   # クリップ書き出し進捗ダイアログ
+main.py                    # エントリーポイント
 tests/
-├── unit/
-└── integration/
+├── unit/                  # ユニットテスト
+└── integration/           # 統合テスト
+specs/                     # 機能仕様書
 ```
+
+## Data Files
+
+| ファイル | 内容 |
+|----------|------|
+| `~/.looplayer/bookmarks.json` | ブックマーク（`enabled` フィールドあり） |
+| `~/.looplayer/recent_files.json` | 最近開いたファイル履歴 |
+| `~/.looplayer/positions.json` | 再生位置の記憶 |
+| `~/.looplayer/settings.json` | アプリ設定（`check_update_on_startup` など） |
 
 ## Commands
 
@@ -50,12 +55,9 @@ pytest tests/unit/ -v   # ユニットテストのみ
 
 ## Code Style
 
-Python 3.12.13: Follow standard conventions
-
-## Recent Changes
-- 011-clip-export: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）、ffmpeg（外部依存・PATH 検索）
-- 010-auto-update: Added Python 3.12.13 + PyQt6 6.10.2（既存）、`urllib.request`（標準ライブラリ）、`tempfile`（標準ライブラリ）
-- 009-english-ui: Added Python 3.12.13 + PyQt6 6.10.2（`QLocale.system()` でロケール検出）
+- Python 標準スタイル (PEP 8)
+- UI 文字列はすべて `looplayer/i18n.py` の `t()` 経由で取得する
+- テストファースト（新機能はテストを先に書いてから実装）
 
 
 <!-- MANUAL ADDITIONS START -->
