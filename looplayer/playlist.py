@@ -21,5 +21,12 @@ class Playlist:
             return True
         return False
 
+    def retreat(self) -> bool:
+        """US8: 前のファイルへ移動する。先頭の場合は移動しない。"""
+        if self.index > 0:
+            self.index -= 1
+            return True
+        return False
+
     def __len__(self) -> int:
         return len(self.files)

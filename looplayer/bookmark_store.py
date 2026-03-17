@@ -23,6 +23,9 @@ class LoopBookmark:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     enabled: bool = True  # 連続再生の対象かどうか（FR-006）
     notes: str = ""  # ブックマークメモ（US6）
+    pause_ms: int = 0  # B点到達後のポーズ間隔（ms）。UI は秒換算で表示（US4）
+    play_count: int = 0  # ループ再生回数（B点到達ごとにインクリメント）（US6）
+    tags: list[str] = field(default_factory=list)  # タグリスト（OR フィルタ用）（US9）
 
     def __post_init__(self) -> None:
         if self.repeat_count < 1:
@@ -38,6 +41,9 @@ class LoopBookmark:
             "order": self.order,
             "enabled": self.enabled,
             "notes": self.notes,
+            "pause_ms": self.pause_ms,
+            "play_count": self.play_count,
+            "tags": self.tags,
         }
 
     @classmethod
@@ -51,6 +57,9 @@ class LoopBookmark:
             id=d["id"],
             enabled=d.get("enabled", True),  # 旧 JSON には enabled キーがないため True にフォールバック
             notes=d.get("notes", ""),  # 旧 JSON には notes キーがないため "" にフォールバック
+            pause_ms=d.get("pause_ms", 0),  # 旧 JSON 互換
+            play_count=d.get("play_count", 0),  # 旧 JSON 互換
+            tags=d.get("tags", []),  # 旧 JSON 互換
         )
 
 
@@ -200,4 +209,48 @@ class BookmarkStore:
             bm.order = len(reordered) + tail
             reordered.append(bm)
         self._data[video_path] = reordered
+        self._save_all()
+
+    def update_ab_points(self, video_path: str, bookmark_id: str, point_a_ms: int, point_b_ms: int) -> None:
+        """A点・B点を更新して永続化する（US2 フレーム微調整用）。"""
+        if point_a_ms >= point_b_ms:
+            raise ValueError(f"A点（{point_a_ms}ms）は B点（{point_b_ms}ms）より前でなければなりません")
+        for b in self._data.get(video_path, []):
+            if b.id == bookmark_id:
+                b.point_a_ms = point_a_ms
+                b.point_b_ms = point_b_ms
+                break
+        self._save_all()
+
+    def update_pause_ms(self, video_path: str, bookmark_id: str, pause_ms: int) -> None:
+        """ポーズ間隔（ms）を更新して永続化する（US4）。"""
+        for b in self._data.get(video_path, []):
+            if b.id == bookmark_id:
+                b.pause_ms = max(0, min(pause_ms, 10000))
+                break
+        self._save_all()
+
+    def increment_play_count(self, video_path: str, bookmark_id: str) -> None:
+        """再生回数を1インクリメントして永続化する（US6）。"""
+        for b in self._data.get(video_path, []):
+            if b.id == bookmark_id:
+                b.play_count += 1
+                break
+        self._save_all()
+
+    def reset_play_count(self, video_path: str, bookmark_id: str) -> None:
+        """再生回数をリセットして永続化する（US6）。"""
+        for b in self._data.get(video_path, []):
+            if b.id == bookmark_id:
+                b.play_count = 0
+                break
+        self._save_all()
+
+    def update_tags(self, video_path: str, bookmark_id: str, tags: list[str]) -> None:
+        """タグを更新して永続化する（US9）。"""
+        cleaned = [tag.strip() for tag in tags if tag.strip()]
+        for b in self._data.get(video_path, []):
+            if b.id == bookmark_id:
+                b.tags = cleaned
+                break
         self._save_all()
