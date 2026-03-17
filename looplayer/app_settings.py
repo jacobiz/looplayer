@@ -40,3 +40,12 @@ class AppSettings:
             raise ValueError(f"Invalid action: {value!r}。有効値: {_VALID_ACTIONS}")
         self._data["end_of_playback_action"] = value
         self.save()
+
+    @property
+    def check_update_on_startup(self) -> bool:
+        return bool(self._data.get("check_update_on_startup", True))
+
+    @check_update_on_startup.setter
+    def check_update_on_startup(self, value: bool) -> None:
+        self._data["check_update_on_startup"] = value
+        self.save()
