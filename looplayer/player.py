@@ -16,6 +16,7 @@ from PyQt6.QtGui import QAction, QActionGroup, QKeySequence, QDragEnterEvent, QD
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from looplayer.bookmark_io import export_bookmarks, import_bookmarks
+from looplayer.updater import UpdateChecker, DownloadDialog
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
 from looplayer.i18n import t
 from looplayer.recent_files import RecentFiles
@@ -109,6 +110,10 @@ class VideoPlayer(QMainWindow):
 
         self._build_ui()
         self._build_menus()
+
+        # 010: 起動時更新確認（バックグラウンド）
+        if self._app_settings.check_update_on_startup:
+            self._start_update_check(silent=True)
 
         # US1: ドラッグ＆ドロップを有効化
         self.setAcceptDrops(True)
@@ -435,6 +440,18 @@ class VideoPlayer(QMainWindow):
         shortcut_list_action = QAction(t("menu.help.shortcuts"), self)
         shortcut_list_action.triggered.connect(self._show_shortcut_dialog)
         help_menu.addAction(shortcut_list_action)
+
+        help_menu.addSeparator()
+
+        check_update_action = QAction(t("menu.help.check_update"), self)
+        check_update_action.triggered.connect(self._check_for_updates_manually)
+        help_menu.addAction(check_update_action)
+
+        self._auto_check_action = QAction(t("menu.help.auto_check"), self)
+        self._auto_check_action.setCheckable(True)
+        self._auto_check_action.setChecked(self._app_settings.check_update_on_startup)
+        self._auto_check_action.toggled.connect(self._toggle_auto_check)
+        help_menu.addAction(self._auto_check_action)
 
         # US4: ? キーでショートカット一覧を表示（ApplicationShortcut コンテキスト）
         self._shortcut_dialog_key = QShortcut(QKeySequence("?"), self)
@@ -1270,6 +1287,61 @@ class VideoPlayer(QMainWindow):
                 self.media_player.get_length(),
             )
         super().closeEvent(event)
+
+    # ── 自動更新 ──────────────────────────────────────────────
+
+    def _start_update_check(self, silent: bool = False) -> None:
+        """UpdateChecker を起動する。silent=True の場合、エラーを無視する。"""
+        checker = UpdateChecker(parent=self)
+        checker.update_available.connect(self._on_update_available)
+        if silent:
+            checker.up_to_date.connect(checker.deleteLater)
+            checker.check_failed.connect(checker.deleteLater)  # サイレント（FR-007）
+        else:
+            checker.up_to_date.connect(self._on_up_to_date)
+            checker.check_failed.connect(self._on_check_failed)
+        checker.finished.connect(checker.deleteLater)
+        checker.start()
+
+    def _on_update_available(self, version: str, url: str) -> None:
+        """新バージョンが利用可能な場合の通知ダイアログを表示する（FR-002/FR-003）。"""
+        body = t("msg.update_available.body").format(current_ver=VERSION, ver=version)
+        msg = QMessageBox(self)
+        msg.setWindowTitle(t("msg.update_available.title"))
+        msg.setText(body)
+        download_btn = None
+        if url:
+            download_btn = msg.addButton(t("btn.download_now"), QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(t("btn.later"), QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        if download_btn is not None and msg.clickedButton() == download_btn:
+            dialog = DownloadDialog(url, version, parent=self)
+            dialog.exec()
+
+    def _check_for_updates_manually(self) -> None:
+        """手動更新確認（ヘルプメニューから呼ばれる）。"""
+        self._start_update_check(silent=False)
+
+    def _on_up_to_date(self) -> None:
+        """最新バージョン使用中の場合のダイアログを表示する（FR-009）。"""
+        from looplayer.version import VERSION as _ver
+        QMessageBox.information(
+            self,
+            t("msg.update_latest.title"),
+            t("msg.update_latest.body").format(ver=_ver),
+        )
+
+    def _on_check_failed(self, error: str) -> None:
+        """手動確認でのネットワークエラーダイアログを表示する（FR-007）。"""
+        QMessageBox.warning(
+            self,
+            t("msg.update_check_failed.title"),
+            t("msg.update_check_failed.body"),
+        )
+
+    def _toggle_auto_check(self, checked: bool) -> None:
+        """起動時チェックの ON/OFF を設定に保存する（FR-008）。"""
+        self._app_settings.check_update_on_startup = checked
 
     # ── VLC エラーハンドリング ────────────────────────────────
 
