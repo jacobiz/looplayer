@@ -1663,7 +1663,7 @@ class VideoPlayer(QMainWindow):
         QMessageBox.warning(
             self,
             t("msg.update_check_failed.title"),
-            t("msg.update_check_failed.body"),
+            f"{t('msg.update_check_failed.body')}\n\n{error}",
         )
 
     def _toggle_auto_check(self, checked: bool) -> None:
