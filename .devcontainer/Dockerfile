@@ -33,8 +33,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     apt-get update && apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
 
-# Node.js 20 LTS (required for Claude Code)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+# Node.js 24 LTS (required for Claude Code)
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
