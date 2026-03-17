@@ -17,6 +17,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-17
 - N/A（言語はメモリ内で決定。永続化なし） (009-english-ui)
 - Python 3.12.13 + PyQt6 6.10.2（既存）、`urllib.request`（標準ライブラリ）、`tempfile`（標準ライブラリ） (010-auto-update)
 - `~/.looplayer/settings.json`（既存・`check_update_on_startup` フィールドを追加） (010-auto-update)
+- Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）、ffmpeg（外部依存・PATH 検索） (011-clip-export)
+- N/A（出力はユーザー指定パス、アプリ設定への変更なし） (011-clip-export)
 
 - Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 (001-video-player-core)
 
@@ -51,9 +53,9 @@ pytest tests/unit/ -v   # ユニットテストのみ
 Python 3.12.13: Follow standard conventions
 
 ## Recent Changes
+- 011-clip-export: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203（既存）、ffmpeg（外部依存・PATH 検索）
 - 010-auto-update: Added Python 3.12.13 + PyQt6 6.10.2（既存）、`urllib.request`（標準ライブラリ）、`tempfile`（標準ライブラリ）
 - 009-english-ui: Added Python 3.12.13 + PyQt6 6.10.2（`QLocale.system()` でロケール検出）
-- 008-seekbar-click-seek: Added Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203
 
 
 <!-- MANUAL ADDITIONS START -->

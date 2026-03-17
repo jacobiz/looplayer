@@ -1,8 +1,9 @@
 """BookmarkRow: ブックマーク一覧の1行ウィジェット。"""
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton, QSpinBox, QInputDialog, QCheckBox,
+    QMenu,
 )
-from PyQt6.QtCore import QEvent, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 
 from looplayer.bookmark_store import LoopBookmark
 from looplayer.i18n import t
@@ -16,11 +17,15 @@ class BookmarkRow(QWidget):
     name_changed = pyqtSignal(str, str)    # bookmark_id, new_name
     enabled_changed = pyqtSignal(str, bool)  # bookmark_id, enabled（FR-006）
     memo_clicked = pyqtSignal(str)         # bookmark_id（US6）
+    export_requested = pyqtSignal(int, int, str)  # a_ms, b_ms, label（011）
 
     def __init__(self, bookmark: LoopBookmark, parent=None):
         super().__init__(parent)
         self.bookmark_id = bookmark.id
         self._notes = bookmark.notes
+        self._point_a_ms = bookmark.point_a_ms
+        self._point_b_ms = bookmark.point_b_ms
+        self._name = bookmark.name
         self._build(bookmark)
 
     def _build(self, bm: LoopBookmark) -> None:
@@ -74,6 +79,27 @@ class BookmarkRow(QWidget):
         layout.addWidget(self.repeat_spin)
         layout.addWidget(self.memo_btn)
         layout.addWidget(del_btn)
+
+        # 011: コンテキストメニュー用の書き出しアクション
+        can_export = (
+            bm.point_a_ms is not None
+            and bm.point_b_ms is not None
+            and bm.point_a_ms < bm.point_b_ms
+        )
+        from PyQt6.QtGui import QAction
+        self._export_clip_action = QAction(t("bookmark.row.export_clip"), self)
+        self._export_clip_action.setEnabled(can_export)
+        self._export_clip_action.triggered.connect(self._on_export_clip)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
+
+    def _show_context_menu(self, pos) -> None:
+        menu = QMenu(self)
+        menu.addAction(self._export_clip_action)
+        menu.exec(self.mapToGlobal(pos))
+
+    def _on_export_clip(self) -> None:
+        self.export_requested.emit(self._point_a_ms, self._point_b_ms, self._name)
 
     def eventFilter(self, obj, event: QEvent) -> bool:
         """名前ラベルのダブルクリックを捕捉して編集ダイアログを開く（FR-004）。"""
