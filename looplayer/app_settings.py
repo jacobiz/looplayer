@@ -49,3 +49,27 @@ class AppSettings:
     def check_update_on_startup(self, value: bool) -> None:
         self._data["check_update_on_startup"] = value
         self.save()
+
+    @property
+    def sequential_play_mode(self) -> str:
+        val = self._data.get("sequential_play_mode", "infinite")
+        return val if val in ("infinite", "one_round") else "infinite"
+
+    @sequential_play_mode.setter
+    def sequential_play_mode(self, value: str) -> None:
+        if value not in ("infinite", "one_round"):
+            raise ValueError(f"Invalid sequential_play_mode: {value!r}")
+        self._data["sequential_play_mode"] = value
+        self.save()
+
+    @property
+    def export_encode_mode(self) -> str:
+        val = self._data.get("export_encode_mode", "copy")
+        return val if val in ("copy", "transcode") else "copy"
+
+    @export_encode_mode.setter
+    def export_encode_mode(self, value: str) -> None:
+        if value not in ("copy", "transcode"):
+            raise ValueError(f"Invalid export_encode_mode: {value!r}")
+        self._data["export_encode_mode"] = value
+        self.save()

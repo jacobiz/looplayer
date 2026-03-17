@@ -112,6 +112,44 @@ _STRINGS: dict[str, dict[str, str]] = {
     "bookmark.memo.prompt":         {"ja": "「{name}」のメモ:",              "en": 'Memo for "{name}":'},
     "bookmark.name.edit_title":     {"ja": "名前を編集",                     "en": "Edit Name"},
     "bookmark.name.edit_prompt":    {"ja": "ブックマーク名:",                 "en": "Bookmark name:"},
+    # US1: A/B 点ショートカット
+    "shortcut.set_a":               {"ja": "A点をセット (I)",                 "en": "Set Point A (I)"},
+    "shortcut.set_b":               {"ja": "B点をセット (O)",                 "en": "Set Point B (O)"},
+    # US2: フレーム単位微調整
+    "btn.frame_minus":              {"ja": "-1F",                             "en": "-1F"},
+    "btn.frame_plus":               {"ja": "+1F",                             "en": "+1F"},
+    # US4: ループ間ポーズ
+    "label.pause_interval":         {"ja": "ポーズ(秒):",                     "en": "Pause(s):"},
+    # US6: 練習カウンター
+    "label.play_count":             {"ja": "再生回数:",                       "en": "Play count:"},
+    "btn.reset_play_count":         {"ja": "再生回数をリセット",               "en": "Reset play count"},
+    # US9: タグ付け
+    "label.tags":                   {"ja": "タグ:",                           "en": "Tags:"},
+    "btn.edit_tags":                {"ja": "🏷",                              "en": "🏷"},
+    "tag.edit_title":               {"ja": "タグを編集",                      "en": "Edit Tags"},
+    "tag.edit_prompt":              {"ja": "タグ（カンマ区切り）:",             "en": "Tags (comma-separated):"},
+    "tag.filter_label":             {"ja": "タグフィルタ:",                    "en": "Tag filter:"},
+    # US5: 連続再生モード
+    "seq.one_round":                {"ja": "1周停止",                         "en": "One Round"},
+    "seq.infinite":                 {"ja": "無限ループ",                      "en": "Infinite Loop"},
+    # US10: エクスポートモード
+    "dialog.export.mode_copy":      {"ja": "高速（ストリームコピー）",          "en": "Fast (stream copy)"},
+    "dialog.export.mode_transcode": {"ja": "正確（再エンコード・H.264）",      "en": "Precise (re-encode H.264)"},
+    # US3: ブックマーク保存ダイアログ
+    "bookmark.save_title":          {"ja": "ブックマーク保存",                 "en": "Save Bookmark"},
+    "bookmark.save_prompt":         {"ja": "ブックマーク名:",                  "en": "Bookmark name:"},
+    # US8: プレイリストパネル タブ名
+    "tab.bookmarks":                {"ja": "ブックマーク",                     "en": "Bookmarks"},
+    "tab.playlist":                 {"ja": "プレイリスト",                     "en": "Playlist"},
+    # US10: エクスポートダイアログ ボタン
+    "btn.export_start":             {"ja": "書き出し開始",                     "en": "Export"},
+    # ExportWorker エラーメッセージ
+    "error.ffmpeg_not_found":       {"ja": "ffmpeg が見つかりません。https://ffmpeg.org/download.html からインストールしてください。",
+                                     "en": "ffmpeg not found. Install from https://ffmpeg.org/download.html"},
+    "error.source_not_found":       {"ja": "ソースファイルが見つかりません: {path}",
+                                     "en": "Source file not found: {path}"},
+    "error.ffmpeg_error":           {"ja": "ffmpeg エラー (code {code}): {detail}",
+                                     "en": "ffmpeg error (code {code}): {detail}"},
 }
 
 # ── 公開 API ────────────────────────────────────────────────

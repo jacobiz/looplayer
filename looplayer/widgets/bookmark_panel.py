@@ -1,6 +1,6 @@
 """BookmarkPanel: ブックマーク一覧パネルウィジェット。"""
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QToolButton,
     QListWidget, QListWidgetItem, QAbstractItemView, QInputDialog,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -13,16 +13,24 @@ from looplayer.widgets.bookmark_row import BookmarkRow
 
 class BookmarkPanel(QWidget):
     """ブックマーク一覧パネル。"""
-    bookmark_selected = pyqtSignal(object)       # LoopBookmark
-    sequential_started = pyqtSignal(object)      # SequentialPlayState
+    bookmark_selected = pyqtSignal(object)          # LoopBookmark
+    sequential_started = pyqtSignal(object)         # SequentialPlayState
     sequential_stopped = pyqtSignal()
-    export_requested = pyqtSignal(int, int, str) # a_ms, b_ms, label
+    export_requested = pyqtSignal(int, int, str)    # a_ms, b_ms, label
+    frame_adjusted = pyqtSignal(str, str, int)      # bm_id, point, new_ms（US2）
+    pause_ms_changed = pyqtSignal(str, int)         # bm_id, pause_ms（US4）
+    play_count_reset = pyqtSignal(str)              # bm_id（US6）
+    tags_changed = pyqtSignal(str, list)            # bm_id, tags（US9）
+    seq_mode_toggled = pyqtSignal(bool)             # one_round（US5）
 
     def __init__(self, store: BookmarkStore, parent=None):
         super().__init__(parent)
         self._store = store
         self._video_path: str | None = None
         self._seq_active = False
+        self._fps: float = 25.0  # US2: フレーム微調整に使用
+        self._one_round_mode: bool = False  # US5: 1周停止モード
+        self._active_tag_filter: list[str] = []  # US9: タグフィルタ
 
         # US5: 削除 Undo 用の保留状態
         self._pending_delete: dict | None = None
@@ -42,6 +50,13 @@ class BookmarkPanel(QWidget):
         header = QHBoxLayout()
         header.addWidget(QLabel(t("bookmark.panel.title")))
         header.addStretch()
+        # US5: 1周停止 / 無限ループ トグルボタン
+        self.one_round_btn = QToolButton()
+        self.one_round_btn.setText(t("seq.infinite"))
+        self.one_round_btn.setCheckable(True)
+        self.one_round_btn.setChecked(False)
+        self.one_round_btn.clicked.connect(self._on_one_round_toggled)
+        header.addWidget(self.one_round_btn)
         self.seq_btn = QPushButton(t("bookmark.panel.seq_play"))
         self.seq_btn.setCheckable(True)
         self.seq_btn.setEnabled(False)
@@ -105,22 +120,31 @@ class BookmarkPanel(QWidget):
         self.list_widget.clear()
         if self._video_path is None:
             return
-        bms = self._store.get_bookmarks(self._video_path)
+        all_bms = self._store.get_bookmarks(self._video_path)
+        # US9: タグフィルタ（OR ロジック）
+        if self._active_tag_filter:
+            bms = [bm for bm in all_bms if any(tag in bm.tags for tag in self._active_tag_filter)]
+        else:
+            bms = all_bms
         for bm in bms:
             item = QListWidgetItem()
-            row = BookmarkRow(bm)
+            row = BookmarkRow(bm, fps=self._fps)
             row.deleted.connect(self._on_delete)
             row.repeat_changed.connect(self._on_repeat_changed)
             row.name_changed.connect(self._on_name_changed)
             row.enabled_changed.connect(self._on_enabled_changed)  # FR-006
             row.memo_clicked.connect(self._on_memo_clicked)  # US6
             row.export_requested.connect(self.export_requested)  # 011
+            row.frame_adjusted.connect(self.frame_adjusted)  # US2
+            row.pause_ms_changed.connect(self._on_pause_ms_changed)  # US4
+            row.play_count_reset.connect(self.play_count_reset)  # US6
+            row.tags_changed.connect(self._on_tags_changed)  # US9
             item.setSizeHint(row.sizeHint())
             item.setData(Qt.ItemDataRole.UserRole, bm.id)
             self.list_widget.addItem(item)
             self.list_widget.setItemWidget(item, row)
         # FR-008: チェック済みが1件以上ある場合のみ連続再生ボタンを有効化
-        self.seq_btn.setEnabled(any(bm.enabled for bm in bms))
+        self.seq_btn.setEnabled(any(bm.enabled for bm in all_bms))
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         if self._video_path is None:
@@ -166,7 +190,10 @@ class BookmarkPanel(QWidget):
         self._pending_delete = None
         if self._video_path is None:
             return
-        self._store.add(self._video_path, bm)
+        # dataclasses.replace でコピーを渡し、add() による order/name の副作用が
+        # スナップショットオブジェクトに波及しないようにする。
+        from dataclasses import replace as _dc_replace
+        self._store.add(self._video_path, _dc_replace(bm))
         # 削除前の ID 順序スナップショットで完全復元（再採番問題を回避）
         self._store.update_order(self._video_path, order_snapshot)
         self._refresh_list()
@@ -247,6 +274,82 @@ class BookmarkPanel(QWidget):
 
         self._seq_active = True
         self.seq_btn.setText(t("bookmark.panel.seq_stop"))
-        state = SequentialPlayState(bookmarks=enabled_bms)
+        state = SequentialPlayState(bookmarks=enabled_bms, one_round_mode=self._one_round_mode)
         self.update_seq_status(state)
         self.sequential_started.emit(state)
+
+    # ── US5: 連続再生モードトグル ──────────────────────────────────
+
+    def _on_one_round_toggled(self, checked: bool) -> None:
+        self._one_round_mode = checked
+        self.one_round_btn.setText(t("seq.one_round") if checked else t("seq.infinite"))
+        self.seq_mode_toggled.emit(checked)
+
+    # ── US4: ポーズ間隔 ──────────────────────────────────────────
+
+    def _on_pause_ms_changed(self, bookmark_id: str, pause_ms: int) -> None:
+        if self._video_path is None:
+            return
+        self._store.update_pause_ms(self._video_path, bookmark_id, pause_ms)
+
+    # ── US5: 連続再生モードトグル ──────────────────────────────────
+
+    def set_one_round_mode(self, one_round: bool) -> None:
+        """US5: 1周停止モードを設定する（player.py から呼ぶ）。"""
+        self._one_round_mode = one_round
+
+    # ── US6: 練習カウンター更新 ────────────────────────────────────
+
+    def update_play_count(self, bookmark_id: str, count: int) -> None:
+        """US6: 指定ブックマーク行の再生回数表示を更新する。"""
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == bookmark_id:
+                row = self.list_widget.itemWidget(item)
+                if hasattr(row, "update_play_count"):
+                    row.update_play_count(count)
+                break
+
+    # ── US2: fps 更新 ──────────────────────────────────────────────
+
+    def set_fps(self, fps: float) -> None:
+        """US2: 全 BookmarkRow の fps を更新する（動画読み込み後に呼ぶ）。"""
+        self._fps = fps if fps > 0 else 25.0
+        for i in range(self.list_widget.count()):
+            row = self.list_widget.itemWidget(self.list_widget.item(i))
+            if hasattr(row, "set_fps"):
+                row.set_fps(self._fps)
+
+    # ── US9: タグ ───────────────────────────────────────────────────
+
+    def _on_tags_changed(self, bookmark_id: str, tags: list[str]) -> None:
+        if self._video_path is None:
+            return
+        self._store.update_tags(self._video_path, bookmark_id, tags)
+        self._refresh_tag_filter_ui()
+
+    def _refresh_tag_filter_ui(self) -> None:
+        """US9: タグフィルタ UI を更新する。"""
+        if not hasattr(self, "tag_filter_list"):
+            return
+        all_tags: set[str] = set()
+        if self._video_path:
+            for bm in self._store.get_bookmarks(self._video_path):
+                all_tags.update(bm.tags)
+        self.tag_filter_list.blockSignals(True)
+        self.tag_filter_list.clear()
+        for tag in sorted(all_tags):
+            from PyQt6.QtWidgets import QListWidgetItem
+            item = QListWidgetItem(tag)
+            item.setCheckState(Qt.CheckState.Checked if tag in self._active_tag_filter else Qt.CheckState.Unchecked)
+            self.tag_filter_list.addItem(item)
+        self.tag_filter_list.blockSignals(False)
+
+    def _on_tag_filter_changed(self) -> None:
+        """US9: タグフィルタの選択変更時に一覧を再描画する。"""
+        self._active_tag_filter = []
+        for i in range(self.tag_filter_list.count()):
+            item = self.tag_filter_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                self._active_tag_filter.append(item.text())
+        self._refresh_list()

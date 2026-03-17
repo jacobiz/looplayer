@@ -1,6 +1,7 @@
 """export_dialog.py — クリップ書き出し進捗ダイアログ。"""
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton,
+    QRadioButton, QGroupBox,
 )
 
 from looplayer.clip_export import ClipExportJob, ExportWorker
@@ -23,6 +24,20 @@ class ExportProgressDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
+        # US10: エンコードモード選択ラジオボタン
+        mode_group = QGroupBox()
+        mode_layout = QVBoxLayout(mode_group)
+        self._copy_radio = QRadioButton(t("dialog.export.mode_copy"))
+        self._transcode_radio = QRadioButton(t("dialog.export.mode_transcode"))
+        # 初期値を job.encode_mode から読み込む
+        if self._job.encode_mode == "transcode":
+            self._transcode_radio.setChecked(True)
+        else:
+            self._copy_radio.setChecked(True)
+        mode_layout.addWidget(self._copy_radio)
+        mode_layout.addWidget(self._transcode_radio)
+        layout.addWidget(mode_group)
+
         self._label = QLabel(t("dialog.export.title"))
         layout.addWidget(self._label)
 
@@ -31,14 +46,31 @@ class ExportProgressDialog(QDialog):
         layout.addWidget(self._progress)
 
         btn_layout = QHBoxLayout()
+        self._start_btn = QPushButton(t("btn.export_start"))
+        self._start_btn.clicked.connect(self._on_start_clicked)
         self._cancel_btn = QPushButton(t("btn.later"))
         self._cancel_btn.clicked.connect(self._cancel)
         btn_layout.addStretch()
+        btn_layout.addWidget(self._start_btn)
         btn_layout.addWidget(self._cancel_btn)
         layout.addLayout(btn_layout)
 
-    def exec(self) -> int:
+    def _on_start_clicked(self) -> None:
+        """書き出し開始ボタン: encode_mode を job にセットして export 開始。"""
+        mode = "transcode" if self._transcode_radio.isChecked() else "copy"
+        self._job.encode_mode = mode
+        # AppSettings に保存
+        try:
+            from looplayer.app_settings import AppSettings
+            AppSettings().export_encode_mode = mode
+        except Exception:
+            pass
+        self._start_btn.setEnabled(False)
+        self._copy_radio.setEnabled(False)
+        self._transcode_radio.setEnabled(False)
         self._start_export()
+
+    def exec(self) -> int:
         return super().exec()
 
     def _start_export(self) -> None:

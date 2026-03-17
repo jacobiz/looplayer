@@ -12,6 +12,7 @@ class SequentialPlayState:
     bookmarks: list[LoopBookmark]
     current_index: int = 0
     active: bool = True
+    one_round_mode: bool = False  # True のとき1周で停止（US5）
     remaining_repeats: int = field(init=False)
 
     def __post_init__(self) -> None:
@@ -28,12 +29,19 @@ class SequentialPlayState:
         next_idx = (self.current_index + 1) % len(self.bookmarks)
         return self.bookmarks[next_idx].name
 
-    def on_b_reached(self) -> int:
-        """B点到達時に呼び出す。次に移動すべき A点タイムスタンプ（ms）を返す。"""
+    def on_b_reached(self) -> int | None:
+        """B点到達時に呼び出す。次に移動すべき A点タイムスタンプ（ms）を返す。
+        1周停止モードで全ブックマーク完走時は None を返す。"""
         self.remaining_repeats -= 1
         if self.remaining_repeats > 0:
             # 同じ区間を繰り返す
             return self.current_bookmark.point_a_ms
+
+        # 最後のブックマークかどうか確認
+        is_last = self.current_index == len(self.bookmarks) - 1
+        if is_last and self.one_round_mode:
+            # 1周停止モード: None を返して player.py 側で停止させる
+            return None
 
         # 次の区間へ（最後なら先頭へ）
         self.current_index = (self.current_index + 1) % len(self.bookmarks)

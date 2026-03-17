@@ -30,9 +30,10 @@ from looplayer.utils import ms_to_str
 from looplayer.version import APP_NAME, VERSION
 from looplayer.widgets.bookmark_panel import BookmarkPanel
 from looplayer.widgets.bookmark_slider import BookmarkSlider
+from looplayer.widgets.playlist_panel import PlaylistPanel
 
 # US3: 動画情報ダイアログ、US4: ショートカットダイアログで使用
-from PyQt6.QtWidgets import QDialog, QGridLayout, QDialogButtonBox, QScrollArea
+from PyQt6.QtWidgets import QDialog, QGridLayout, QDialogButtonBox, QScrollArea, QInputDialog
 from PyQt6.QtGui import QShortcut
 
 
@@ -84,6 +85,9 @@ class VideoPlayer(QMainWindow):
 
         # 連続再生状態
         self._seq_state: SequentialPlayState | None = None
+
+        # US4: ループ間ポーズタイマー（スペースキーでキャンセル可能なので singleShot でなく QTimer インスタンス）
+        self._pause_timer: QTimer | None = None
 
         # 音量状態
         self._volume: int = 80
@@ -217,13 +221,28 @@ class VideoPlayer(QMainWindow):
         bookmark_save_layout.addStretch()
         controls_layout.addLayout(bookmark_save_layout)
 
-        # ブックマークパネル
+        # ブックマークパネル + プレイリストパネル（US8: QTabWidget で切り替え）
+        from PyQt6.QtWidgets import QTabWidget
+        self._panel_tabs = QTabWidget()
+
         self.bookmark_panel = BookmarkPanel(self._store)
         self.bookmark_panel.bookmark_selected.connect(self._on_bookmark_selected)
         self.bookmark_panel.sequential_started.connect(self._on_sequential_started)
         self.bookmark_panel.sequential_stopped.connect(self._on_sequential_stopped)
         self.bookmark_panel.export_requested.connect(self._export_clip_from_bookmark)
-        controls_layout.addWidget(self.bookmark_panel)
+        self.bookmark_panel.frame_adjusted.connect(self._on_frame_adjusted)  # US2
+        self.bookmark_panel.pause_ms_changed.connect(self._on_pause_ms_changed)  # US4
+        self.bookmark_panel.play_count_reset.connect(self._on_play_count_reset)  # US6
+        self.bookmark_panel.tags_changed.connect(self._on_tags_changed)  # US9
+        self.bookmark_panel.seq_mode_toggled.connect(self._on_seq_mode_toggled)  # US5
+
+        self.playlist_panel = PlaylistPanel()
+        self.playlist_panel.file_requested.connect(self._open_path)  # US8
+
+        self._panel_tabs.addTab(self.bookmark_panel, t("tab.bookmarks"))
+        self._playlist_tab_index = self._panel_tabs.addTab(self.playlist_panel, t("tab.playlist"))
+        self._panel_tabs.setTabVisible(self._playlist_tab_index, False)
+        controls_layout.addWidget(self._panel_tabs)
 
         # ステータスバー初期化（スクリーンショット通知・速度フィードバック等で使用）
         self.statusBar()
@@ -238,6 +257,11 @@ class VideoPlayer(QMainWindow):
         open_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
+
+        # US7: フォルダを開く
+        open_folder_action = QAction(t("menu.file.open_folder"), self)
+        open_folder_action.triggered.connect(self.open_folder)
+        file_menu.addAction(open_folder_action)
 
         # US3: 動画情報（動画未選択時は無効）
         self._video_info_action = QAction(t("menu.file.video_info"), self)
@@ -450,6 +474,22 @@ class VideoPlayer(QMainWindow):
         frame_back_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
         frame_back_shortcut.activated.connect(self._frame_backward)
 
+        # US1 (012): A/B 点キーボードショートカット（I=A点, O=B点）
+        set_a_shortcut = QShortcut(QKeySequence("I"), self)
+        set_a_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        set_a_shortcut.activated.connect(self.set_point_a)
+        set_b_shortcut = QShortcut(QKeySequence("O"), self)
+        set_b_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        set_b_shortcut.activated.connect(self.set_point_b)
+
+        # US8: プレイリスト Alt+←/→ ナビゲーション
+        playlist_next_sc = QShortcut(QKeySequence("Alt+Right"), self)
+        playlist_next_sc.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        playlist_next_sc.activated.connect(self._playlist_next)
+        playlist_prev_sc = QShortcut(QKeySequence("Alt+Left"), self)
+        playlist_prev_sc.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        playlist_prev_sc.activated.connect(self._playlist_prev)
+
         # ── ヘルプメニュー ──────────────────────────────────────
         help_menu = self.menuBar().addMenu(t("menu.help"))
 
@@ -492,8 +532,18 @@ class VideoPlayer(QMainWindow):
             return
         self._open_path(path)
 
+    def open_folder(self) -> None:
+        """US7: フォルダ選択ダイアログを開き、動画をプレイリストとして読み込む。"""
+        from pathlib import Path as _Path
+        folder = QFileDialog.getExistingDirectory(self, t("menu.file.open_folder"))
+        if not folder:
+            return
+        self._open_folder(_Path(folder))
+
     def _open_path(self, path: str) -> None:
         """ダイアログなしでパスを直接開くコアロジック（D&D・最近開いたファイルで共用）。"""
+        # US4: ファイル切替時にポーズタイマーをキャンセル
+        self._cancel_pause_timer()
         # US5: 別ファイルを開く前に現在位置を保存
         if self._current_video_path:
             self._playback_position.save(
@@ -519,6 +569,9 @@ class VideoPlayer(QMainWindow):
         self.play_btn.setText(t("btn.pause"))
         self.setWindowTitle(f"Video Player - {os.path.basename(path)}")
         self.reset_ab()
+        # US8: プレイリストパネルの現在ファイルハイライト更新
+        if hasattr(self, "playlist_panel"):
+            self.playlist_panel.update_current(path)
 
         # US5: 前回の再生位置を復元（少し遅延してシーク）
         saved_pos = self._playback_position.load(path)
@@ -805,14 +858,24 @@ class VideoPlayer(QMainWindow):
             return
         if len(files) == 1:
             self._playlist = None
+            self._update_playlist_panel()
             self._open_path(str(files[0]))
             return
         self._playlist = Playlist(list(files))
+        self._update_playlist_panel()
         self._open_path(str(self._playlist.current()))
 
     # ── 再生制御 ─────────────────────────────────────────────
 
     def toggle_play(self):
+        # US4: ポーズタイマーがアクティブならキャンセルして再開
+        if self._pause_timer is not None:
+            self._cancel_pause_timer()
+            if self.ab_point_a is not None:
+                self._resume_after_pause(self.ab_point_a)
+            elif self._seq_state and self._seq_state.active:
+                self._resume_after_pause(self._seq_state.current_bookmark.point_a_ms)
+            return
         if self.media_player.is_playing():
             self.media_player.pause()
             self.play_btn.setText(t("btn.play"))
@@ -854,14 +917,38 @@ class VideoPlayer(QMainWindow):
                 f"{ms_to_str(int(pos * length_ms))} / {ms_to_str(length_ms)}"
             )
 
+        # ポーズタイマーアクティブ中はループ制御しない
+        if self._pause_timer is not None:
+            return
+
         # 連続再生チェック（通常の AB ループより優先）
         if self._seq_state and self._seq_state.active:
             if length_ms > 0:
                 current_ms = int(pos * length_ms)
                 bm = self._seq_state.current_bookmark
                 if current_ms >= bm.point_b_ms:
+                    # US6: 再生回数インクリメント
+                    if self._current_video_path:
+                        self._store.increment_play_count(self._current_video_path, bm.id)
+                        new_bms = self._store.get_bookmarks(self._current_video_path)
+                        updated_bm = next((b for b in new_bms if b.id == bm.id), None)
+                        if updated_bm:
+                            self.bookmark_panel.update_play_count(bm.id, updated_bm.play_count)
                     next_a = self._seq_state.on_b_reached()
-                    self.media_player.set_time(next_a)
+                    if next_a is None:
+                        # US5: 1周停止モード — 連続再生終了
+                        self._stop_seq_play()
+                        return
+                    # US4: ポーズ間隔
+                    if bm.pause_ms > 0:
+                        self.media_player.pause()
+                        timer = QTimer(self)
+                        timer.setSingleShot(True)
+                        timer.timeout.connect(lambda a=next_a: self._resume_after_pause(a))
+                        self._pause_timer = timer
+                        timer.start(bm.pause_ms)
+                    else:
+                        self.media_player.set_time(next_a)
                     self.bookmark_panel.update_seq_status(self._seq_state)
                     # US1 T017: ブックマーク遷移時にスライダーの強調表示を更新
                     self._sync_slider_bookmarks()
@@ -872,7 +959,28 @@ class VideoPlayer(QMainWindow):
             if length_ms > 0:
                 current_ms = int(pos * length_ms)
                 if current_ms >= self.ab_point_b:
-                    self.media_player.set_time(self.ab_point_a)
+                    # US4: ポーズ間隔（通常 AB ループの場合は現在選択中ブックマークの pause_ms を使用）
+                    pause_ms = 0
+                    if self._current_video_path:
+                        for bm in self._store.get_bookmarks(self._current_video_path):
+                            if bm.point_a_ms == self.ab_point_a and bm.point_b_ms == self.ab_point_b:
+                                pause_ms = bm.pause_ms
+                                # US6: 再生回数インクリメント
+                                self._store.increment_play_count(self._current_video_path, bm.id)
+                                new_bms = self._store.get_bookmarks(self._current_video_path)
+                                updated_bm = next((b for b in new_bms if b.id == bm.id), None)
+                                if updated_bm:
+                                    self.bookmark_panel.update_play_count(bm.id, updated_bm.play_count)
+                                break
+                    if pause_ms > 0:
+                        self.media_player.pause()
+                        timer = QTimer(self)
+                        timer.setSingleShot(True)
+                        timer.timeout.connect(lambda a=self.ab_point_a: self._resume_after_pause(a))
+                        self._pause_timer = timer
+                        timer.start(pause_ms)
+                    else:
+                        self.media_player.set_time(self.ab_point_a)
 
     # ── 音量・ミュート操作 ────────────────────────────────────
 
@@ -1072,18 +1180,18 @@ class VideoPlayer(QMainWindow):
     # ── AB ループ操作 ─────────────────────────────────────────
 
     def set_point_a(self):
-        t = self.media_player.get_time()
-        if t < 0:
+        pos_ms = self.media_player.get_time()
+        if pos_ms < 0:
             return
-        self.ab_point_a = t
+        self.ab_point_a = pos_ms
         self._update_ab_info()
         self._update_save_btn_state()
 
     def set_point_b(self):
-        t = self.media_player.get_time()
-        if t < 0:
+        pos_ms = self.media_player.get_time()
+        if pos_ms < 0:
             return
-        self.ab_point_b = t
+        self.ab_point_b = pos_ms
         self._update_ab_info()
         self._update_save_btn_state()
 
@@ -1129,10 +1237,17 @@ class VideoPlayer(QMainWindow):
     # ── ブックマーク操作 ──────────────────────────────────────
 
     def _save_bookmark(self):
-        """FR-001: 現在の AB 区間をブックマークとして保存する。"""
+        """US3: 現在の AB 区間をブックマークとして保存する（名前入力ダイアログ付き）。"""
         if self.ab_point_a is None or self.ab_point_b is None:
             return
-        bm = LoopBookmark(point_a_ms=self.ab_point_a, point_b_ms=self.ab_point_b)
+        # US3: 名前入力ダイアログを表示
+        default_name = f"ブックマーク {ms_to_str(self.ab_point_a)}-{ms_to_str(self.ab_point_b)}"
+        name, ok = QInputDialog.getText(
+            self, t("bookmark.save_title"), t("bookmark.save_prompt"), text=default_name
+        )
+        if not ok:
+            return
+        bm = LoopBookmark(point_a_ms=self.ab_point_a, point_b_ms=self.ab_point_b, name=name.strip())
         video_length_ms = self.media_player.get_length()
         try:
             self.bookmark_panel.add_bookmark(bm, video_length_ms)
@@ -1180,6 +1295,95 @@ class VideoPlayer(QMainWindow):
             self._seq_state.stop()
         self._seq_state = None
         self._sync_slider_bookmarks()
+
+    # ── US2: フレーム単位微調整 ──────────────────────────────────
+
+    def _on_frame_adjusted(self, bm_id: str, point: str, new_ms: int) -> None:
+        """US2: BookmarkRow の frame_adjusted シグナルを受けてストアを更新する。"""
+        if self._current_video_path is None:
+            return
+        bms = self._store.get_bookmarks(self._current_video_path)
+        bm = next((b for b in bms if b.id == bm_id), None)
+        if bm is None:
+            return
+        # ポーズタイマーをクリア（フレーム調整時は中断）
+        self._cancel_pause_timer()
+        if point == "a":
+            new_a, new_b = new_ms, bm.point_b_ms
+        else:
+            new_a, new_b = bm.point_a_ms, new_ms
+        try:
+            self._store.update_ab_points(self._current_video_path, bm_id, new_a, new_b)
+        except ValueError:
+            return
+        self._sync_slider_bookmarks()
+
+    def _cancel_pause_timer(self) -> None:
+        """US4: ループ間ポーズタイマーをキャンセルしてクリアする。"""
+        if self._pause_timer is not None:
+            self._pause_timer.stop()
+            self._pause_timer = None
+
+    def _resume_after_pause(self, a_ms: int) -> None:
+        """US4: ポーズ終了後に A 点にシークして再生を再開する。"""
+        self._pause_timer = None
+        self.media_player.set_time(a_ms)
+        self.media_player.play()
+        self.play_btn.setText(t("btn.pause"))
+
+    def _on_pause_ms_changed(self, bm_id: str, pause_ms: int) -> None:
+        """US4: pause_ms_changed シグナルを bookmark_panel 経由で受信（BookmarkPanel が永続化済み）。"""
+        pass  # 永続化は BookmarkPanel._on_pause_ms_changed が担当
+
+    def _on_play_count_reset(self, bm_id: str) -> None:
+        """US6: 再生回数リセット。"""
+        if self._current_video_path is None:
+            return
+        self._store.reset_play_count(self._current_video_path, bm_id)
+        bms = self._store.get_bookmarks(self._current_video_path)
+        bm = next((b for b in bms if b.id == bm_id), None)
+        if bm:
+            self.bookmark_panel.update_play_count(bm_id, 0)
+
+    def _on_tags_changed(self, bm_id: str, tags: list[str]) -> None:
+        """US9: tags_changed シグナルを bookmark_panel 経由で受信（BookmarkPanel が永続化済み）。"""
+        pass  # 永続化は BookmarkPanel._on_tags_changed が担当
+
+    def _on_seq_mode_toggled(self, one_round: bool) -> None:
+        """US5: 連続再生モードトグル。"""
+        if self._seq_state:
+            self._seq_state.one_round_mode = one_round
+        self.bookmark_panel.set_one_round_mode(one_round)
+        self._app_settings.sequential_play_mode = "one_round" if one_round else "infinite"
+
+    def _stop_seq_play(self) -> None:
+        """US5: 連続再生を停止する（on_b_reached が None を返したとき）。"""
+        if self._seq_state:
+            self._seq_state.stop()
+        self._seq_state = None
+        self.bookmark_panel.stop_sequential()
+        self._sync_slider_bookmarks()
+
+    # ── US8: プレイリスト UI ──────────────────────────────────────
+
+    def _playlist_next(self) -> None:
+        """US8: プレイリストの次ファイルへ移動する。"""
+        if self._playlist and self._playlist.has_next():
+            self._playlist.advance()
+            self._open_path(str(self._playlist.current()))
+
+    def _playlist_prev(self) -> None:
+        """US8: プレイリストの前ファイルへ移動する。"""
+        if self._playlist and self._playlist.index > 0:
+            self._playlist.retreat()
+            self._open_path(str(self._playlist.current()))
+
+    def _update_playlist_panel(self) -> None:
+        """US8: プレイリストパネルを更新し、プレイリストがある場合はタブを表示する。"""
+        if hasattr(self, "playlist_panel") and hasattr(self, "_panel_tabs"):
+            self.playlist_panel.set_playlist(self._playlist)
+            has_playlist = self._playlist is not None and len(self._playlist) > 1
+            self._panel_tabs.setTabVisible(self._playlist_tab_index, has_playlist)
 
     # ── US3: 動画情報ダイアログ ──────────────────────────────────
 
@@ -1295,6 +1499,8 @@ class VideoPlayer(QMainWindow):
             ("M", "ミュート切り替え"),
         ]),
         ("AB ループ操作", [
+            ("I", t("shortcut.set_a")),
+            ("O", t("shortcut.set_b")),
             ("A点セット", "ボタンクリックで A 点を設定"),
             ("B点セット", "ボタンクリックで B 点を設定"),
         ]),

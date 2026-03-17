@@ -28,7 +28,8 @@ looplayer/
     ├── bookmark_panel.py  # ブックマークリストパネル
     ├── bookmark_row.py    # ブックマーク行ウィジェット
     ├── bookmark_slider.py # タイムライン可視化
-    └── export_dialog.py   # クリップ書き出し進捗ダイアログ
+    ├── export_dialog.py   # クリップ書き出し進捗ダイアログ
+    └── playlist_panel.py  # プレイリスト UI パネル（012）
 main.py                    # エントリーポイント
 tests/
 ├── unit/                  # ユニットテスト
@@ -62,3 +63,10 @@ pytest tests/unit/ -v   # ユニットテストのみ
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
+
+## Active Technologies
+- Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203、ffmpeg（US10 のトランスコード用、既存） (012-player-improvements)
+- `~/.looplayer/bookmarks.json`（LoopBookmark 拡張）、`~/.looplayer/settings.json`（AppSettings 拡張） (012-player-improvements)
+
+## Recent Changes
+- 012-player-improvements: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203、ffmpeg（US10 のトランスコード用、既存）
