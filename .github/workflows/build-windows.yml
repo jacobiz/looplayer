@@ -29,6 +29,6 @@ jobs:
       - name: アーティファクトをアップロード
         uses: actions/upload-artifact@v4
         with:
-          name: LoopPlayer-Windows
-          path: dist/LoopPlayer.exe
+          name: looplay-Windows
+          path: dist/looplay.exe
           retention-days: 30

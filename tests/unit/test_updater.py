@@ -51,8 +51,8 @@ def test_update_checker_emits_update_available(qtbot):
     api_response = {
         "tag_name": "v1.2.0",
         "assets": [
-            {"name": "LoopPlayer-Setup-1.2.0.exe",
-             "browser_download_url": "https://github.com/jacobiz/looplayer/releases/download/v1.2.0/LoopPlayer-Setup-1.2.0.exe"},
+            {"name": "looplay-Setup-1.2.0.exe",
+             "browser_download_url": "https://github.com/jacobiz/looplayer/releases/download/v1.2.0/looplay-Setup-1.2.0.exe"},
         ],
     }
     with patch("looplayer.updater.urllib.request.urlopen", _make_urlopen_mock(api_response)), \
@@ -65,7 +65,7 @@ def test_update_checker_emits_update_available(qtbot):
         checker.wait()
 
     assert received[0][0] == "1.2.0"
-    assert "LoopPlayer-Setup-1.2.0.exe" in received[0][1]
+    assert "looplay-Setup-1.2.0.exe" in received[0][1]
 
 
 def test_update_checker_emits_up_to_date(qtbot):
@@ -96,8 +96,8 @@ def test_update_checker_unsupported_platform_emits_update_available_with_empty_u
     api_response = {
         "tag_name": "v1.2.0",
         "assets": [
-            {"name": "LoopPlayer-Setup-1.2.0.exe",
-             "browser_download_url": "https://example.com/LoopPlayer-Setup-1.2.0.exe"},
+            {"name": "looplay-Setup-1.2.0.exe",
+             "browser_download_url": "https://github.com/jacobiz/looplayer/releases/download/v1.2.0/looplay-Setup-1.2.0.exe"},
         ],
     }
     with patch("looplayer.updater.urllib.request.urlopen", _make_urlopen_mock(api_response)), \

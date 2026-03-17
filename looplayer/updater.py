@@ -50,7 +50,7 @@ class UpdateChecker(QThread):
         try:
             req = urllib.request.Request(
                 _API_URL,
-                headers={"User-Agent": f"LoopPlayer/{self._current_version}"},
+                headers={"User-Agent": f"looplay!/{self._current_version}"},
             )
             with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
                 data = json.loads(resp.read())
@@ -79,9 +79,9 @@ class UpdateChecker(QThread):
 def _select_asset(assets: list, version: str) -> str:
     """プラットフォームに対応するインストーラー URL を返す。対応外は空文字列。"""
     if sys.platform == "win32":
-        pattern = f"LoopPlayer-Setup-{version}.exe"
+        pattern = f"looplay-Setup-{version}.exe"
     elif sys.platform == "darwin":
-        pattern = f"LoopPlayer-{version}.dmg"
+        pattern = f"looplay-{version}.dmg"
     else:
         # Linux 等: ダウンロードをスキップ（通知のみ）
         return ""

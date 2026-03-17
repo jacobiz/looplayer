@@ -34,7 +34,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='LoopPlayer',
+    name='looplay',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -47,8 +47,8 @@ exe = EXE(
 
 app = BUNDLE(
     exe,
-    name='LoopPlayer.app',
+    name='looplay!.app',
     icon=None,
-    bundle_identifier='com.looplayer.app',
+    bundle_identifier='com.looplay.app',
     argv_emulation=True,
 )
