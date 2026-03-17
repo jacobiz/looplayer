@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 from pytestqt.qtbot import QtBot
 
 from looplayer.bookmark_store import BookmarkStore
+from looplayer.i18n import t as _t
 from looplayer.player import VideoPlayer
 
 
@@ -21,15 +22,17 @@ def player(qtbot: QtBot, tmp_path: Path) -> VideoPlayer:
 
 
 def _get_play_menu(player: VideoPlayer):
+    play_title = _t("menu.playback").replace("&", "")
     for action in player.menuBar().actions():
-        if "再生" in action.text():
+        if play_title in action.text().replace("&", ""):
             return action.menu()
     return None
 
 
 def _get_file_menu(player: VideoPlayer):
+    file_title = _t("menu.file").replace("&", "")
     for action in player.menuBar().actions():
-        if "ファイル" in action.text():
+        if file_title in action.text().replace("&", ""):
             return action.menu()
     return None
 
@@ -43,13 +46,15 @@ class TestAudioTrackMenu:
     def test_audio_track_menu_exists_in_play_menu(self, player):
         play_menu = _get_play_menu(player)
         assert play_menu is not None
-        titles = [a.text() for a in play_menu.actions()]
-        assert any("音声" in t for t in titles), f"音声トラックメニューが再生メニューにありません: {titles}"
+        audio_text = _t("menu.playback.audio_track").replace("&", "")
+        titles = [a.text().replace("&", "") for a in play_menu.actions()]
+        assert any(audio_text in txt for txt in titles), f"音声トラックメニューが再生メニューにありません: {titles}"
 
     def test_audio_track_menu_is_submenu(self, player):
         play_menu = _get_play_menu(player)
+        audio_text = _t("menu.playback.audio_track").replace("&", "")
         for action in play_menu.actions():
-            if "音声" in action.text():
+            if audio_text in action.text().replace("&", ""):
                 assert action.menu() is not None, "音声トラックメニューがサブメニューではありません"
                 return
         pytest.fail("音声トラックメニューが見つかりません")
@@ -61,13 +66,15 @@ class TestSubtitleMenu:
     def test_subtitle_menu_exists_in_play_menu(self, player):
         play_menu = _get_play_menu(player)
         assert play_menu is not None
-        titles = [a.text() for a in play_menu.actions()]
-        assert any("字幕" in t for t in titles), f"字幕メニューが再生メニューにありません: {titles}"
+        sub_text = _t("menu.playback.subtitle").replace("&", "")
+        titles = [a.text().replace("&", "") for a in play_menu.actions()]
+        assert any(sub_text in txt for txt in titles), f"字幕メニューが再生メニューにありません: {titles}"
 
     def test_subtitle_menu_is_submenu(self, player):
         play_menu = _get_play_menu(player)
+        sub_text = _t("menu.playback.subtitle").replace("&", "")
         for action in play_menu.actions():
-            if "字幕" in action.text():
+            if sub_text in action.text().replace("&", ""):
                 assert action.menu() is not None, "字幕メニューがサブメニューではありません"
                 return
         pytest.fail("字幕メニューが見つかりません")
@@ -82,16 +89,18 @@ class TestScreenshotMenu:
     def test_screenshot_action_exists_in_file_menu(self, player):
         file_menu = _get_file_menu(player)
         assert file_menu is not None
-        titles = [a.text() for a in file_menu.actions()]
-        assert any("スクリーンショット" in t for t in titles), (
+        ss_text = _t("menu.file.screenshot").replace("&", "")
+        titles = [a.text().replace("&", "") for a in file_menu.actions()]
+        assert any(ss_text in txt for txt in titles), (
             f"スクリーンショットアクションがファイルメニューにありません: {titles}"
         )
 
     def test_screenshot_action_disabled_when_no_video(self, player):
         """動画未ロード時はスクリーンショットアクションがグレーアウトされていること。"""
         file_menu = _get_file_menu(player)
+        ss_text = _t("menu.file.screenshot").replace("&", "")
         for action in file_menu.actions():
-            if "スクリーンショット" in action.text():
+            if ss_text in action.text().replace("&", ""):
                 assert not action.isEnabled(), "動画未ロード時はグレーアウトされるべきです"
                 return
         pytest.fail("スクリーンショットアクションが見つかりません")

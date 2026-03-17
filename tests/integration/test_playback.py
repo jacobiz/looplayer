@@ -1,12 +1,13 @@
 """再生制御の統合テスト（ボタン操作・UI状態確認）。"""
 from PyQt6.QtCore import Qt
 from pytestqt.qtbot import QtBot
+from looplayer.i18n import t
 from looplayer.player import VideoPlayer
 
 
 def test_initial_state(player: VideoPlayer):
     """初期状態: 再生ボタンラベルが「再生」、スライダーが先頭、時刻が00:00。"""
-    assert player.play_btn.text() == "再生"
+    assert player.play_btn.text() == t("btn.play")
     assert player.seek_slider.value() == 0
     assert player.time_label.text() == "00:00 / 00:00"
 
@@ -18,7 +19,7 @@ def test_initial_ab_info(player: VideoPlayer):
 
 def test_initial_ab_loop_button(player: VideoPlayer):
     """初期状態: ABループボタンが「ABループ: OFF」でオフ。"""
-    assert player.ab_toggle_btn.text() == "ABループ: OFF"
+    assert player.ab_toggle_btn.text() == t("btn.ab_loop_off")
     assert not player.ab_toggle_btn.isChecked()
 
 
@@ -27,4 +28,4 @@ def test_stop_resets_slider(player: VideoPlayer, qtbot: QtBot):
     qtbot.mouseClick(player.stop_btn, Qt.MouseButton.LeftButton)
     assert player.seek_slider.value() == 0
     assert player.time_label.text() == "00:00 / 00:00"
-    assert player.play_btn.text() == "再生"
+    assert player.play_btn.text() == t("btn.play")

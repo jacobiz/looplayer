@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QMenu
 from pytestqt.qtbot import QtBot
 
 from looplayer.bookmark_store import BookmarkStore
+from looplayer.i18n import t as _t
 from looplayer.player import VideoPlayer
 
 
@@ -24,15 +25,17 @@ class TestRecentMenuExists:
     """ファイルメニューに「最近開いたファイル」サブメニューが存在する。"""
 
     def test_recent_submenu_exists(self, player):
+        file_title = _t("menu.file").replace("&", "")
         file_menu = None
         for action in player.menuBar().actions():
-            if "ファイル" in action.text():
+            if file_title in action.text().replace("&", ""):
                 file_menu = action.menu()
                 break
         assert file_menu is not None
+        recent_text = _t("menu.file.recent").replace("&", "")
         recent_menu = None
         for action in file_menu.actions():
-            if action.menu() and "最近" in action.text():
+            if action.menu() and recent_text in action.text().replace("&", ""):
                 recent_menu = action.menu()
                 break
         assert recent_menu is not None, "「最近開いたファイル」サブメニューが見つかりません"
@@ -104,11 +107,13 @@ class TestMissingFileRemoval:
 
 
 def _get_recent_menu(player: VideoPlayer):
+    file_title = _t("menu.file").replace("&", "")
+    recent_text = _t("menu.file.recent").replace("&", "")
     for action in player.menuBar().actions():
-        if "ファイル" in action.text():
+        if file_title in action.text().replace("&", ""):
             file_menu = action.menu()
             if file_menu:
                 for sub in file_menu.actions():
-                    if sub.menu() and "最近" in sub.text():
+                    if sub.menu() and recent_text in sub.text().replace("&", ""):
                         return sub.menu()
     return None

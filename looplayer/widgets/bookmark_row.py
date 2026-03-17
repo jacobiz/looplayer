@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QEvent, pyqtSignal
 
 from looplayer.bookmark_store import LoopBookmark
+from looplayer.i18n import t
 from looplayer.utils import ms_to_str
 
 
@@ -29,7 +30,7 @@ class BookmarkRow(QWidget):
         # FR-006: 連続再生対象チェックボックス（デフォルト: enabled の値）
         self.enabled_checkbox = QCheckBox()
         self.enabled_checkbox.setChecked(bm.enabled)
-        self.enabled_checkbox.setToolTip("連続再生の対象にする")
+        self.enabled_checkbox.setToolTip(t("bookmark.row.enabled_tip"))
         self.enabled_checkbox.stateChanged.connect(
             lambda _: self.enabled_changed.emit(self.bookmark_id, self.enabled_checkbox.isChecked())
         )
@@ -37,7 +38,7 @@ class BookmarkRow(QWidget):
 
         self.name_label = QLabel(bm.name)
         self.name_label.setMinimumWidth(80)
-        self.name_label.setToolTip("ダブルクリックで名前を編集")
+        self.name_label.setToolTip(t("bookmark.row.name_tip"))
         self.name_label.installEventFilter(self)
 
         time_label = QLabel(
@@ -45,7 +46,7 @@ class BookmarkRow(QWidget):
         )
         time_label.setStyleSheet("color: #888; font-size: 11px;")
 
-        repeat_label = QLabel("繰返:")
+        repeat_label = QLabel(t("bookmark.row.repeat"))
         self.repeat_spin = QSpinBox()
         self.repeat_spin.setMinimum(1)
         self.repeat_spin.setMaximum(99)
@@ -57,7 +58,7 @@ class BookmarkRow(QWidget):
 
         del_btn = QPushButton("×")
         del_btn.setFixedWidth(24)
-        del_btn.setToolTip("削除")
+        del_btn.setToolTip(t("bookmark.row.delete_tip"))
         del_btn.clicked.connect(lambda: self.deleted.emit(self.bookmark_id))
 
         # US6: メモボタン
@@ -78,7 +79,7 @@ class BookmarkRow(QWidget):
         """名前ラベルのダブルクリックを捕捉して編集ダイアログを開く（FR-004）。"""
         if obj is self.name_label and event.type() == QEvent.Type.MouseButtonDblClick:
             new_name, ok = QInputDialog.getText(
-                self, "名前を編集", "ブックマーク名:", text=self.name_label.text()
+                self, t("bookmark.name.edit_title"), t("bookmark.name.edit_prompt"), text=self.name_label.text()
             )
             if ok and new_name.strip():
                 self.name_label.setText(new_name.strip())
@@ -89,10 +90,10 @@ class BookmarkRow(QWidget):
     def _refresh_memo_style(self, notes: str) -> None:
         """メモの有無に応じてボタンのスタイルとツールチップを更新する。"""
         if notes:
-            self.memo_btn.setToolTip(f"メモ: {notes}")
+            self.memo_btn.setToolTip(t("bookmark.row.memo_tip_content").format(notes=notes))
             self.memo_btn.setStyleSheet("font-weight: bold;")
         else:
-            self.memo_btn.setToolTip("メモ")
+            self.memo_btn.setToolTip(t("bookmark.row.memo_tip"))
             self.memo_btn.setStyleSheet("")
 
     def update_notes(self, notes: str) -> None:

@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
+from looplayer.i18n import t
 from looplayer.sequential import SequentialPlayState
 from looplayer.widgets.bookmark_row import BookmarkRow
 
@@ -38,9 +39,9 @@ class BookmarkPanel(QWidget):
 
         # ── ヘッダー行 ──
         header = QHBoxLayout()
-        header.addWidget(QLabel("ブックマーク一覧"))
+        header.addWidget(QLabel(t("bookmark.panel.title")))
         header.addStretch()
-        self.seq_btn = QPushButton("連続再生")
+        self.seq_btn = QPushButton(t("bookmark.panel.seq_play"))
         self.seq_btn.setCheckable(True)
         self.seq_btn.setEnabled(False)
         self.seq_btn.clicked.connect(self._on_seq_btn)
@@ -87,7 +88,7 @@ class BookmarkPanel(QWidget):
             return
         cur = state.current_bookmark.name
         nxt = state.next_bookmark_name
-        self.seq_status_label.setText(f"▶ 現在: {cur}  →  次: {nxt}")
+        self.seq_status_label.setText(t("bookmark.panel.seq_status").format(cur=cur, nxt=nxt))
         self.seq_status_label.show()
 
     def stop_sequential(self) -> None:
@@ -95,7 +96,7 @@ class BookmarkPanel(QWidget):
         self._seq_active = False
         self.seq_status_label.hide()
         self.seq_btn.setChecked(False)
-        self.seq_btn.setText("連続再生")
+        self.seq_btn.setText(t("bookmark.panel.seq_play"))
 
     # ── 内部処理 ────────────────────────────────────────────
 
@@ -199,7 +200,7 @@ class BookmarkPanel(QWidget):
         if bm is None:
             return
         text, ok = QInputDialog.getMultiLineText(
-            self, "メモを編集", f"「{bm.name}」のメモ:", bm.notes
+            self, t("bookmark.memo.title"), t("bookmark.memo.prompt").format(name=bm.name), bm.notes
         )
         if ok:
             self._store.update_notes(self._video_path, bookmark_id, text)
@@ -243,7 +244,7 @@ class BookmarkPanel(QWidget):
             return
 
         self._seq_active = True
-        self.seq_btn.setText("連続再生 停止")
+        self.seq_btn.setText(t("bookmark.panel.seq_stop"))
         state = SequentialPlayState(bookmarks=enabled_bms)
         self.update_seq_status(state)
         self.sequential_started.emit(state)

@@ -7,6 +7,7 @@ from PyQt6.QtCore import QSize
 from pytestqt.qtbot import QtBot
 
 from looplayer.bookmark_store import BookmarkStore
+from looplayer.i18n import t as _t
 from looplayer.player import VideoPlayer
 
 
@@ -114,11 +115,13 @@ class TestManualResizeMenuAction:
     """表示メニューに「ウィンドウを動画サイズに合わせる」QAction が存在する。"""
 
     def test_fit_window_action_exists(self, player):
+        view_title = _t("menu.view").replace("&", "")
         view_menu = None
         for action in player.menuBar().actions():
-            if "表示" in action.text():
+            if view_title in action.text().replace("&", ""):
                 view_menu = action.menu()
                 break
         assert view_menu is not None
+        fit_text = _t("menu.view.fit_window")
         texts = [a.text() for a in view_menu.actions()]
-        assert any("動画サイズ" in t for t in texts), f"動画サイズアクションが見つかりません: {texts}"
+        assert any(fit_text in txt for txt in texts), f"fit_windowアクションが見つかりません: {texts}"

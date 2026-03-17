@@ -17,6 +17,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from looplayer.bookmark_io import export_bookmarks, import_bookmarks
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
+from looplayer.i18n import t
 from looplayer.recent_files import RecentFiles
 from looplayer.sequential import SequentialPlayState
 from looplayer.utils import ms_to_str
@@ -145,7 +146,7 @@ class VideoPlayer(QMainWindow):
         self.volume_slider.setValue(80)
         self.volume_slider.setFixedWidth(120)
         self.volume_slider.valueChanged.connect(self._on_volume_slider_changed)
-        volume_bar.addWidget(QLabel("音量:"))
+        volume_bar.addWidget(QLabel(t("label.volume")))
         volume_bar.addWidget(self.volume_slider)
         volume_bar.addWidget(self.volume_label)
         volume_bar.addStretch()
@@ -158,6 +159,7 @@ class VideoPlayer(QMainWindow):
         self.seek_slider.setRange(0, 1000)
         self.seek_slider.sliderMoved.connect(self._on_seek)
         self.seek_slider.bookmark_bar_clicked.connect(self._on_bookmark_bar_clicked)
+        self.seek_slider.seek_requested.connect(self._on_seek_ms)
         seek_layout.addWidget(self.seek_slider)
         seek_layout.addWidget(self.time_label)
         controls_layout.addLayout(seek_layout)
@@ -166,7 +168,7 @@ class VideoPlayer(QMainWindow):
         ctrl_layout = QHBoxLayout()
         self.open_btn = QPushButton("開く")
         self.open_btn.clicked.connect(self.open_file)
-        self.play_btn = QPushButton("再生")
+        self.play_btn = QPushButton(t("btn.play"))
         self.play_btn.clicked.connect(self.toggle_play)
         self.stop_btn = QPushButton("停止")
         self.stop_btn.clicked.connect(self.stop)
@@ -182,7 +184,7 @@ class VideoPlayer(QMainWindow):
         self.set_a_btn.clicked.connect(self.set_point_a)
         self.set_b_btn = QPushButton("B点セット")
         self.set_b_btn.clicked.connect(self.set_point_b)
-        self.ab_toggle_btn = QPushButton("ABループ: OFF")
+        self.ab_toggle_btn = QPushButton(t("btn.ab_loop_off"))
         self.ab_toggle_btn.setCheckable(True)
         self.ab_toggle_btn.clicked.connect(self.toggle_ab_loop)
         self.ab_reset_btn = QPushButton("ABリセット")
@@ -218,16 +220,16 @@ class VideoPlayer(QMainWindow):
     def _build_menus(self):
         """メニューバーを構築する（T005/T006/T007/T013/T015/T017/T019）。"""
         # ── ファイルメニュー ──────────────────────────────────
-        file_menu = self.menuBar().addMenu("ファイル(&F)")
+        file_menu = self.menuBar().addMenu(t("menu.file"))
 
-        open_action = QAction("開く...", self)
+        open_action = QAction(t("menu.file.open"), self)
         open_action.setShortcut(QKeySequence("Ctrl+O"))
         open_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
         # US3: 動画情報（動画未選択時は無効）
-        self._video_info_action = QAction("動画情報...", self)
+        self._video_info_action = QAction(t("menu.file.video_info"), self)
         self._video_info_action.setEnabled(False)
         self._video_info_action.triggered.connect(self._show_video_info)
         file_menu.addAction(self._video_info_action)
@@ -235,13 +237,13 @@ class VideoPlayer(QMainWindow):
         file_menu.addSeparator()
 
         # US2: 最近開いたファイル サブメニュー
-        self._recent_menu = file_menu.addMenu("最近開いたファイル(&R)")
+        self._recent_menu = file_menu.addMenu(t("menu.file.recent"))
         self._rebuild_recent_menu()
 
         file_menu.addSeparator()
 
         # US3: スクリーンショット（動画未ロード時は無効）
-        self._screenshot_action = QAction("スクリーンショット(&P)", self)
+        self._screenshot_action = QAction(t("menu.file.screenshot"), self)
         self._screenshot_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
         self._screenshot_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         self._screenshot_action.setEnabled(False)
@@ -251,52 +253,52 @@ class VideoPlayer(QMainWindow):
         file_menu.addSeparator()
 
         # US6: ブックマークエクスポート（動画未選択時は無効）
-        self._export_action = QAction("ブックマークをエクスポート...", self)
+        self._export_action = QAction(t("menu.file.export"), self)
         self._export_action.setEnabled(False)
         self._export_action.triggered.connect(self._export_bookmarks)
         file_menu.addAction(self._export_action)
 
         # US6: ブックマークインポート
-        import_action = QAction("ブックマークをインポート...", self)
+        import_action = QAction(t("menu.file.import"), self)
         import_action.triggered.connect(self._import_bookmarks)
         file_menu.addAction(import_action)
 
         file_menu.addSeparator()
 
-        quit_action = QAction("終了", self)
+        quit_action = QAction(t("menu.file.quit"), self)
         quit_action.setShortcut(QKeySequence("Ctrl+Q"))
         quit_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
         # ── 再生メニュー ──────────────────────────────────────
-        play_menu = self.menuBar().addMenu("再生(&P)")
+        play_menu = self.menuBar().addMenu(t("menu.playback"))
 
-        play_pause_action = QAction("再生/一時停止", self)
+        play_pause_action = QAction(t("menu.playback.play_pause"), self)
         play_pause_action.setShortcut(QKeySequence("Space"))
         play_pause_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         play_pause_action.triggered.connect(self.toggle_play)
         play_menu.addAction(play_pause_action)
 
-        stop_action = QAction("停止", self)
+        stop_action = QAction(t("menu.playback.stop"), self)
         stop_action.triggered.connect(self.stop)
         play_menu.addAction(stop_action)
 
         play_menu.addSeparator()
 
-        vol_up_action = QAction("音量を上げる", self)
+        vol_up_action = QAction(t("menu.playback.vol_up"), self)
         vol_up_action.setShortcut(QKeySequence(Qt.Key.Key_Up))
         vol_up_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         vol_up_action.triggered.connect(lambda: self._set_volume(self._volume + 10))
         play_menu.addAction(vol_up_action)
 
-        vol_down_action = QAction("音量を下げる", self)
+        vol_down_action = QAction(t("menu.playback.vol_down"), self)
         vol_down_action.setShortcut(QKeySequence(Qt.Key.Key_Down))
         vol_down_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         vol_down_action.triggered.connect(lambda: self._set_volume(self._volume - 10))
         play_menu.addAction(vol_down_action)
 
-        mute_action = QAction("ミュート", self)
+        mute_action = QAction(t("menu.playback.mute"), self)
         mute_action.setShortcut(QKeySequence("M"))
         mute_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         mute_action.triggered.connect(self._toggle_mute)
@@ -305,7 +307,7 @@ class VideoPlayer(QMainWindow):
         play_menu.addSeparator()
 
         # 再生速度サブメニュー
-        speed_menu = play_menu.addMenu("再生速度")
+        speed_menu = play_menu.addMenu(t("menu.playback.speed"))
         self.speed_action_group = QActionGroup(self)
         self.speed_action_group.setExclusive(True)
         for rate, label in [(0.5, "0.5倍"), (0.75, "0.75倍"), (1.0, "標準 (1.0倍)"),
@@ -322,11 +324,11 @@ class VideoPlayer(QMainWindow):
         play_menu.addSeparator()
 
         # US4: 再生終了時の動作サブメニュー
-        end_action_menu = play_menu.addMenu("再生終了時の動作(&E)")
+        end_action_menu = play_menu.addMenu(t("menu.playback.end_action"))
         end_action_group = QActionGroup(self)
         end_action_group.setExclusive(True)
         current_action = self._app_settings.end_of_playback_action
-        for action_id, label in [("stop", "停止"), ("rewind", "先頭に戻る"), ("loop", "ループ再生")]:
+        for action_id, label in [("stop", t("menu.playback.end_stop")), ("rewind", t("menu.playback.end_rewind")), ("loop", t("menu.playback.end_loop"))]:
             a = QAction(label, self)
             a.setCheckable(True)
             a.setChecked(action_id == current_action)
@@ -339,24 +341,24 @@ class VideoPlayer(QMainWindow):
         play_menu.addSeparator()
 
         # US2: 音声トラック・字幕トラックサブメニュー
-        self._audio_track_menu = play_menu.addMenu("音声トラック(&A)")
+        self._audio_track_menu = play_menu.addMenu(t("menu.playback.audio_track"))
         self._audio_track_menu.setEnabled(False)
         self._audio_track_menu.aboutToShow.connect(self._rebuild_audio_track_menu)
 
-        self._subtitle_menu = play_menu.addMenu("字幕(&S)")
+        self._subtitle_menu = play_menu.addMenu(t("menu.playback.subtitle"))
         self._subtitle_menu.setEnabled(False)
         self._subtitle_menu.aboutToShow.connect(self._rebuild_subtitle_menu)
 
         # ── 表示メニュー ──────────────────────────────────────
-        view_menu = self.menuBar().addMenu("表示(&V)")
+        view_menu = self.menuBar().addMenu(t("menu.view"))
 
-        self.fullscreen_action = QAction("フルスクリーン", self)
+        self.fullscreen_action = QAction(t("menu.view.fullscreen"), self)
         self.fullscreen_action.setShortcut(QKeySequence("F"))
         self.fullscreen_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
         view_menu.addAction(self.fullscreen_action)
 
-        esc_action = QAction("フルスクリーン解除", self)
+        esc_action = QAction(t("menu.view.exit_fullscreen"), self)
         esc_action.setShortcut(QKeySequence("Escape"))
         esc_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         esc_action.triggered.connect(self._exit_fullscreen)
@@ -364,13 +366,13 @@ class VideoPlayer(QMainWindow):
 
         view_menu.addSeparator()
 
-        fit_window_action = QAction("ウィンドウを動画サイズに合わせる", self)
+        fit_window_action = QAction(t("menu.view.fit_window"), self)
         fit_window_action.triggered.connect(self._start_size_poll)
         view_menu.addAction(fit_window_action)
 
         view_menu.addSeparator()
 
-        self.always_on_top_action = QAction("常に最前面に表示", self)
+        self.always_on_top_action = QAction(t("menu.view.always_on_top"), self)
         self.always_on_top_action.setCheckable(True)
         self.always_on_top_action.setChecked(False)
         self.always_on_top_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
@@ -428,9 +430,9 @@ class VideoPlayer(QMainWindow):
         frame_back_shortcut.activated.connect(self._frame_backward)
 
         # ── ヘルプメニュー ──────────────────────────────────────
-        help_menu = self.menuBar().addMenu("ヘルプ(&H)")
+        help_menu = self.menuBar().addMenu(t("menu.help"))
 
-        shortcut_list_action = QAction("ショートカット一覧", self)
+        shortcut_list_action = QAction(t("menu.help.shortcuts"), self)
         shortcut_list_action.triggered.connect(self._show_shortcut_dialog)
         help_menu.addAction(shortcut_list_action)
 
@@ -481,7 +483,7 @@ class VideoPlayer(QMainWindow):
             self.media_player.set_xwindow(win_id)
 
         self.media_player.play()
-        self.play_btn.setText("一時停止")
+        self.play_btn.setText(t("btn.pause"))
         self.setWindowTitle(f"Video Player - {os.path.basename(path)}")
         self.reset_ab()
 
@@ -537,7 +539,7 @@ class VideoPlayer(QMainWindow):
         if not _os.path.exists(path):
             self._recent.remove(path)
             self._rebuild_recent_menu()
-            QMessageBox.warning(self, "ファイルが見つかりません", f"ファイルが見つかりません:\n{path}")
+            QMessageBox.warning(self, t("msg.file_not_found.title"), t("msg.file_not_found.body").format(path=path))
             return
         self._open_path(path)
 
@@ -556,12 +558,12 @@ class VideoPlayer(QMainWindow):
         try:
             export_bookmarks(bms, path)
         except OSError as e:
-            QMessageBox.warning(self, "エクスポートエラー", f"ファイルの書き込みに失敗しました:\n{e}")
+            QMessageBox.warning(self, t("msg.export_error.title"), t("msg.export_error.body").format(error=e))
 
     def _import_bookmarks(self) -> None:
         """US6: JSON ファイルからブックマークをインポートする（重複スキップ）。"""
         if self._current_video_path is None:
-            QMessageBox.warning(self, "動画が開かれていません", "ブックマークをインポートするには動画を開いてください。")
+            QMessageBox.warning(self, t("msg.no_video.title"), t("msg.no_video.body"))
             return
         path, _ = QFileDialog.getOpenFileName(
             self, "ブックマークをインポート", "", "JSON ファイル (*.json);;すべてのファイル (*)"
@@ -571,7 +573,7 @@ class VideoPlayer(QMainWindow):
         try:
             imported = import_bookmarks(path)
         except ValueError as e:
-            QMessageBox.warning(self, "インポートエラー", str(e))
+            QMessageBox.warning(self, t("msg.import_error.title"), str(e))
             return
         existing = self._store.get_bookmarks(self._current_video_path)
         existing_pairs = {(bm.point_a_ms, bm.point_b_ms) for bm in existing}
@@ -671,7 +673,7 @@ class VideoPlayer(QMainWindow):
             if not p.name.startswith('.') and p.suffix.lower() in self._SUPPORTED_EXTENSIONS
         )
         if not files:
-            QMessageBox.warning(self, "エラー", "対応する動画ファイルが見つかりませんでした。")
+            QMessageBox.warning(self, t("msg.no_video_file.title"), t("msg.no_video_file.body"))
             return
         if len(files) == 1:
             self._playlist = None
@@ -685,14 +687,14 @@ class VideoPlayer(QMainWindow):
     def toggle_play(self):
         if self.media_player.is_playing():
             self.media_player.pause()
-            self.play_btn.setText("再生")
+            self.play_btn.setText(t("btn.play"))
         else:
             self.media_player.play()
-            self.play_btn.setText("一時停止")
+            self.play_btn.setText(t("btn.pause"))
 
     def stop(self):
         self.media_player.stop()
-        self.play_btn.setText("再生")
+        self.play_btn.setText(t("btn.play"))
         self.seek_slider.setValue(0)
         self.time_label.setText("00:00 / 00:00")
 
@@ -709,11 +711,16 @@ class VideoPlayer(QMainWindow):
         if self.media_player.get_length() > 0:
             self.media_player.set_position(value / 1000.0)
 
+    def _on_seek_ms(self, ms: int) -> None:
+        """シークバークリック/ドラッグによる再生位置更新（FR-001, FR-001b）。"""
+        if self.media_player.get_length() > 0:
+            self.media_player.set_time(ms)
+
     def _on_timer(self):
         length_ms = self.media_player.get_length()
         pos = self.media_player.get_position()
 
-        if length_ms > 0 and not self.seek_slider.isSliderDown():
+        if length_ms > 0 and not self.seek_slider.isSliderDown() and not self.seek_slider.is_track_dragging:
             self.seek_slider.setValue(int(pos * 1000))
             self.time_label.setText(
                 f"{ms_to_str(int(pos * length_ms))} / {ms_to_str(length_ms)}"
@@ -838,7 +845,7 @@ class VideoPlayer(QMainWindow):
         filename = f"LoopPlayer_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         path = save_dir / filename
         self.media_player.video_take_snapshot(0, str(path), 0, 0)
-        self.statusBar().showMessage(f"保存しました: {path}", 3000)
+        self.statusBar().showMessage(t("status.screenshot_saved").format(path=path), 3000)
 
     def _speed_up(self):
         """再生速度を1段階上げる（US1）。"""
@@ -846,7 +853,7 @@ class VideoPlayer(QMainWindow):
         if idx < len(_PLAYBACK_RATES) - 1:
             self._set_playback_rate(_PLAYBACK_RATES[idx + 1])
         else:
-            self.statusBar().showMessage("最大速度です", 2000)
+            self.statusBar().showMessage(t("status.max_speed"), 2000)
 
     def _speed_down(self):
         """再生速度を1段階下げる（US1）。"""
@@ -854,7 +861,7 @@ class VideoPlayer(QMainWindow):
         if idx > 0:
             self._set_playback_rate(_PLAYBACK_RATES[idx - 1])
         else:
-            self.statusBar().showMessage("最小速度です", 2000)
+            self.statusBar().showMessage(t("status.min_speed"), 2000)
 
     def _frame_forward(self):
         """1フレーム進める（US1）。再生中は自動一時停止する。"""
@@ -868,8 +875,8 @@ class VideoPlayer(QMainWindow):
             self.media_player.pause()
         fps = self.media_player.get_fps()
         frame_ms = int(1000.0 / fps) if fps > 0 else 40  # フォールバック: 25fps
-        t = self.media_player.get_time()
-        self.media_player.set_time(max(0, t - frame_ms))
+        current_ms = self.media_player.get_time()
+        self.media_player.set_time(max(0, current_ms - frame_ms))
 
     # ── フルスクリーン操作 ────────────────────────────────────
 
@@ -955,19 +962,19 @@ class VideoPlayer(QMainWindow):
     def toggle_ab_loop(self, checked):
         if checked and self.ab_point_a is not None and self.ab_point_b is not None:
             if self.ab_point_a >= self.ab_point_b:
-                QMessageBox.warning(self, "ABループエラー", "A点はB点より前に設定してください。")
+                QMessageBox.warning(self, t("msg.ab_error.title"), t("msg.ab_error.body"))
                 self.ab_toggle_btn.setChecked(False)
                 return
         self.ab_loop_active = checked
         self.ab_toggle_btn.setChecked(checked)
-        self.ab_toggle_btn.setText("ABループ: ON" if checked else "ABループ: OFF")
+        self.ab_toggle_btn.setText(t("btn.ab_loop_on") if checked else t("btn.ab_loop_off"))
 
     def reset_ab(self):
         self.ab_point_a = None
         self.ab_point_b = None
         self.ab_loop_active = False
         self.ab_toggle_btn.setChecked(False)
-        self.ab_toggle_btn.setText("ABループ: OFF")
+        self.ab_toggle_btn.setText(t("btn.ab_loop_off"))
         self._update_ab_info()
         self._update_save_btn_state()
 
@@ -993,7 +1000,7 @@ class VideoPlayer(QMainWindow):
             self.bookmark_panel.add_bookmark(bm, video_length_ms)
             self._sync_slider_bookmarks()
         except ValueError as e:
-            QMessageBox.warning(self, "ブックマーク保存エラー", str(e))
+            QMessageBox.warning(self, t("msg.bookmark_error.title"), str(e))
 
     def _on_bookmark_selected(self, bookmark: LoopBookmark):
         """FR-003: ブックマーク選択時に AB ループを切り替える。"""
@@ -1004,13 +1011,13 @@ class VideoPlayer(QMainWindow):
         self.ab_point_b = bookmark.point_b_ms
         self.ab_loop_active = True
         self.ab_toggle_btn.setChecked(True)
-        self.ab_toggle_btn.setText("ABループ: ON")
+        self.ab_toggle_btn.setText(t("btn.ab_loop_on"))
         self._update_ab_info()
         self._update_save_btn_state()
         self.media_player.set_time(bookmark.point_a_ms)
         if not self.media_player.is_playing():
             self.media_player.play()
-            self.play_btn.setText("一時停止")
+            self.play_btn.setText(t("btn.pause"))
         self._sync_slider_bookmarks()
 
     # ── 連続再生操作 ──────────────────────────────────────────
@@ -1021,12 +1028,12 @@ class VideoPlayer(QMainWindow):
         # 通常 AB ループを無効化
         self.ab_loop_active = False
         self.ab_toggle_btn.setChecked(False)
-        self.ab_toggle_btn.setText("ABループ: OFF")
+        self.ab_toggle_btn.setText(t("btn.ab_loop_off"))
         # 最初の区間のA点から再生開始
         self.media_player.set_time(state.current_bookmark.point_a_ms)
         if not self.media_player.is_playing():
             self.media_player.play()
-            self.play_btn.setText("一時停止")
+            self.play_btn.setText(t("btn.pause"))
         self._sync_slider_bookmarks()
 
     def _on_sequential_stopped(self):
@@ -1098,7 +1105,7 @@ class VideoPlayer(QMainWindow):
 
         # ── ダイアログ構築 ──
         dialog = QDialog(self)
-        dialog.setWindowTitle("動画情報")
+        dialog.setWindowTitle(t("dialog.video_info.title"))
         dialog.setMinimumWidth(400)
         grid = QGridLayout(dialog)
         grid.setColumnMinimumWidth(0, 120)
@@ -1172,7 +1179,7 @@ class VideoPlayer(QMainWindow):
     def _show_shortcut_dialog(self) -> None:
         """US4: ショートカット一覧ダイアログを表示する（FR-014）。"""
         dialog = QDialog(self)
-        dialog.setWindowTitle("キーボードショートカット一覧")
+        dialog.setWindowTitle(t("dialog.shortcuts.title"))
         dialog.setMinimumWidth(420)
 
         outer = QVBoxLayout(dialog)

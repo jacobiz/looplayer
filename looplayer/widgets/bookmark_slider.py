@@ -20,14 +20,21 @@ class BookmarkSlider(QSlider):
     """ブックマーク区間バーを重ね描きするシークスライダー（FR-001〜FR-005）。"""
 
     bookmark_bar_clicked = pyqtSignal(str)  # クリックされたブックマークの ID
+    seek_requested = pyqtSignal(int)        # トラッククリック/ドラッグ時のシーク位置（ms）
 
     def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None):
         super().__init__(orientation, parent)
         self._bookmarks: list[LoopBookmark] = []
         self._duration_ms: int = 0
         self._current_id: str | None = None  # 連続再生中の強調対象 ID
+        self._dragging: bool = False          # トラッククリック起点のドラッグ中フラグ
 
     # ── 外部インターフェース ──────────────────────────────────
+
+    @property
+    def is_track_dragging(self) -> bool:
+        """トラッククリック起点のドラッグ中かどうかを返す。"""
+        return self._dragging
 
     def set_bookmarks(
         self,
@@ -61,6 +68,13 @@ class BookmarkSlider(QSlider):
             return groove.left()
         ratio = max(0.0, min(1.0, ms / dur))
         return groove.left() + int(ratio * groove.width())
+
+    def _x_to_ms(self, x: int, groove: QRect) -> int:
+        """グルーブ内 X 座標をミリ秒に変換する（[0, _duration_ms] にクリップ）。"""
+        if groove.width() <= 0:
+            return 0
+        ratio = max(0.0, min(1.0, (x - groove.left()) / groove.width()))
+        return int(ratio * self._duration_ms)
 
     def _bar_x_range(
         self, a_ms: int, b_ms: int, groove: QRect, duration_ms: int | None = None
@@ -112,10 +126,34 @@ class BookmarkSlider(QSlider):
         return result
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
-        """バーのクリックを検出して bookmark_bar_clicked シグナルを emit する。"""
+        """バーのクリックを検出して bookmark_bar_clicked を emit するか、トラッククリックシークを行う。"""
         if event.button() == Qt.MouseButton.LeftButton:
-            bm_id = self._find_bookmark_at_x(event.position().toPoint().x())
+            x = event.position().toPoint().x()
+            bm_id = self._find_bookmark_at_x(x)
             if bm_id is not None:
                 self.bookmark_bar_clicked.emit(bm_id)
-                return  # シークは行わず、ブックマーク選択のみ
+                event.accept()  # super() を呼ばず明示的に処理済みとする
+                return
+            if self._duration_ms > 0:
+                groove = self._groove_rect()
+                ms = self._x_to_ms(x, groove)
+                self.seek_requested.emit(ms)
+                self._dragging = True
+                event.accept()
+                return
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
+        """ドラッグ中に seek_requested をリアルタイムで emit する。"""
+        if self._dragging and event.buttons() & Qt.MouseButton.LeftButton:
+            groove = self._groove_rect()
+            ms = self._x_to_ms(event.position().toPoint().x(), groove)
+            self.seek_requested.emit(ms)
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
+        """ドラッグ終了時に _dragging フラグをクリアする。"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = False
+        super().mouseReleaseEvent(event)

@@ -9,6 +9,7 @@ from PyQt6.QtTest import QTest
 from pathlib import Path
 
 from looplayer.bookmark_store import BookmarkStore
+from looplayer.i18n import t
 from looplayer.player import VideoPlayer
 
 
@@ -29,21 +30,22 @@ class TestMenuBarExists:
 
     def test_file_menu_exists(self, player):
         menus = [a.text() for a in player.menuBar().actions()]
-        assert any("ファイル" in m for m in menus)
+        assert any(t("menu.file").replace("&", "") in m.replace("&", "") for m in menus)
 
     def test_play_menu_exists(self, player):
         menus = [a.text() for a in player.menuBar().actions()]
-        assert any("再生" in m for m in menus)
+        assert any(t("menu.playback").replace("&", "") in m.replace("&", "") for m in menus)
 
     def test_view_menu_exists(self, player):
         menus = [a.text() for a in player.menuBar().actions()]
-        assert any("表示" in m for m in menus)
+        assert any(t("menu.view").replace("&", "") in m.replace("&", "") for m in menus)
 
 
 class TestFileMenuActions:
     def _get_file_menu(self, player):
+        file_title = t("menu.file").replace("&", "")
         for action in player.menuBar().actions():
-            if "ファイル" in action.text():
+            if file_title in action.text().replace("&", ""):
                 return action.menu()
         return None
 
@@ -58,19 +60,22 @@ class TestFileMenuActions:
     def test_open_action_exists(self, player):
         menu = self._get_file_menu(player)
         assert menu is not None
-        action_texts = [a.text() for a in menu.actions() if not a.isSeparator()]
-        assert any("開く" in t for t in action_texts)
+        open_text = t("menu.file.open").replace("&", "")
+        action_texts = [a.text().replace("&", "") for a in menu.actions() if not a.isSeparator()]
+        assert any(open_text in txt for txt in action_texts)
 
     def test_quit_action_exists(self, player):
         menu = self._get_file_menu(player)
         assert menu is not None
-        action_texts = [a.text() for a in menu.actions() if not a.isSeparator()]
-        assert any("終了" in t for t in action_texts)
+        quit_text = t("menu.file.quit").replace("&", "")
+        action_texts = [a.text().replace("&", "") for a in menu.actions() if not a.isSeparator()]
+        assert any(quit_text in txt for txt in action_texts)
 
     def test_open_action_has_ctrl_o_shortcut(self, player):
         """Ctrl+O ショートカットが開くアクションに設定されていることを確認。"""
         actions = self._get_all_actions(player)
-        open_action = next((a for a in actions if "開く" in a.text() and not a.isSeparator()), None)
+        open_text = t("menu.file.open").replace("&", "")
+        open_action = next((a for a in actions if open_text in a.text().replace("&", "") and not a.isSeparator()), None)
         assert open_action is not None
         assert open_action.shortcut().toString() == "Ctrl+O"
 
@@ -79,7 +84,8 @@ class TestFileMenuActions:
         with patch("looplayer.player.QFileDialog.getOpenFileName", return_value=("", "")) as mock_dialog:
             # アクションを直接トリガー
             actions = self._get_all_actions(player)
-            open_action = next((a for a in actions if "開く" in a.text() and not a.isSeparator()), None)
+            open_text = t("menu.file.open").replace("&", "")
+            open_action = next((a for a in actions if open_text in a.text().replace("&", "") and not a.isSeparator()), None)
             assert open_action is not None
             open_action.trigger()
             mock_dialog.assert_called_once()
