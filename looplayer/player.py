@@ -15,8 +15,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QAction, QActionGroup, QKeySequence, QDragEnterEvent, QDropEvent
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
+import shutil
+import subprocess
+from pathlib import Path
 from looplayer.bookmark_io import export_bookmarks, import_bookmarks
+from looplayer.clip_export import ClipExportJob, ExportWorker
 from looplayer.updater import UpdateChecker, DownloadDialog
+from looplayer.widgets.export_dialog import ExportProgressDialog
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
 from looplayer.i18n import t
 from looplayer.recent_files import RecentFiles
@@ -217,6 +222,7 @@ class VideoPlayer(QMainWindow):
         self.bookmark_panel.bookmark_selected.connect(self._on_bookmark_selected)
         self.bookmark_panel.sequential_started.connect(self._on_sequential_started)
         self.bookmark_panel.sequential_stopped.connect(self._on_sequential_stopped)
+        self.bookmark_panel.export_requested.connect(self._export_clip_from_bookmark)
         controls_layout.addWidget(self.bookmark_panel)
 
         # ステータスバー初期化（スクリーンショット通知・速度フィードバック等で使用）
@@ -267,6 +273,16 @@ class VideoPlayer(QMainWindow):
         import_action = QAction(t("menu.file.import"), self)
         import_action.triggered.connect(self._import_bookmarks)
         file_menu.addAction(import_action)
+
+        file_menu.addSeparator()
+
+        # 011: クリップ書き出し
+        self._clip_export_action = QAction(t("menu.file.export_clip"), self)
+        self._clip_export_action.setShortcut(QKeySequence("Ctrl+E"))
+        self._clip_export_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._clip_export_action.setEnabled(False)
+        self._clip_export_action.triggered.connect(self._export_clip)
+        file_menu.addAction(self._clip_export_action)
 
         file_menu.addSeparator()
 
@@ -559,6 +575,101 @@ class VideoPlayer(QMainWindow):
             QMessageBox.warning(self, t("msg.file_not_found.title"), t("msg.file_not_found.body").format(path=path))
             return
         self._open_path(path)
+
+    # ── 011: クリップ書き出し ────────────────────────────────
+
+    def _export_clip(self, start_ms: int | None = None, end_ms: int | None = None,
+                     label: str | None = None) -> None:
+        """AB ループ区間またはブックマーク区間をクリップとして書き出す。"""
+        # ffmpeg 検出
+        if shutil.which("ffmpeg") is None:
+            QMessageBox.warning(
+                self,
+                t("msg.ffmpeg_not_found.title"),
+                t("msg.ffmpeg_not_found.body"),
+            )
+            return
+
+        # ソースファイル確認
+        if self._current_video_path is None:
+            return
+        source = Path(self._current_video_path)
+        if not source.exists():
+            QMessageBox.warning(
+                self,
+                t("msg.file_not_found.title"),
+                t("msg.file_not_found.body").format(path=source),
+            )
+            return
+
+        # 区間の決定
+        a_ms = start_ms if start_ms is not None else self.ab_point_a
+        b_ms = end_ms if end_ms is not None else self.ab_point_b
+        if a_ms is None or b_ms is None or a_ms >= b_ms:
+            return
+
+        # デフォルトファイル名の生成
+        dummy_job = ClipExportJob(
+            source_path=source,
+            start_ms=a_ms,
+            end_ms=b_ms,
+            output_path=source.parent / "dummy",
+        )
+        if label:
+            default_name = dummy_job.default_filename_for_bookmark(label)
+        else:
+            default_name = dummy_job.default_filename()
+
+        # ファイル保存ダイアログ
+        suffix = source.suffix
+        out_path, _ = QFileDialog.getSaveFileName(
+            self,
+            t("menu.file.export_clip"),
+            str(source.parent / default_name),
+            f"動画ファイル (*{suffix});;すべてのファイル (*)",
+        )
+        if not out_path:
+            return
+
+        # 書き出し実行
+        job = ClipExportJob(
+            source_path=source,
+            start_ms=a_ms,
+            end_ms=b_ms,
+            output_path=Path(out_path),
+        )
+        self._clip_export_action.setEnabled(False)
+        dlg = ExportProgressDialog(job, parent=self)
+        result = dlg.exec()
+
+        self._update_clip_export_action_state()
+
+        if result == ExportProgressDialog.DialogCode.Accepted:
+            out_file = Path(out_path)
+            reply = QMessageBox.information(
+                self,
+                t("msg.export_success.title"),
+                t("msg.export_success.body").format(filename=out_file.name),
+                QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Ok,
+                QMessageBox.StandardButton.Ok,
+            )
+            if reply == QMessageBox.StandardButton.Open:
+                self._open_folder_in_explorer(out_file.parent)
+
+    def _export_clip_from_bookmark(self, a_ms: int, b_ms: int, label: str) -> None:
+        """ブックマーク行からのクリップ書き出しリクエストを処理する。"""
+        self._export_clip(start_ms=a_ms, end_ms=b_ms, label=label)
+
+    @staticmethod
+    def _open_folder_in_explorer(folder: Path) -> None:
+        """OS のファイルマネージャーでフォルダを開く。"""
+        import sys
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", str(folder)])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(folder)])
+        else:
+            subprocess.Popen(["xdg-open", str(folder)])
 
     # ── US6: ブックマーク エクスポート/インポート ────────────
 
@@ -1004,6 +1115,16 @@ class VideoPlayer(QMainWindow):
         """FR-001: A・B点が両方設定済み時のみ保存ボタンを有効化。"""
         enabled = self.ab_point_a is not None and self.ab_point_b is not None
         self.save_bookmark_btn.setEnabled(enabled)
+        self._update_clip_export_action_state()
+
+    def _update_clip_export_action_state(self) -> None:
+        """AB ループの状態に応じてクリップ書き出しアクションの有効/無効を更新する。"""
+        enabled = (
+            self.ab_point_a is not None
+            and self.ab_point_b is not None
+            and self.ab_point_a < self.ab_point_b
+        )
+        self._clip_export_action.setEnabled(enabled)
 
     # ── ブックマーク操作 ──────────────────────────────────────
 

@@ -13,9 +13,10 @@ from looplayer.widgets.bookmark_row import BookmarkRow
 
 class BookmarkPanel(QWidget):
     """ブックマーク一覧パネル。"""
-    bookmark_selected = pyqtSignal(object)   # LoopBookmark
-    sequential_started = pyqtSignal(object)  # SequentialPlayState
+    bookmark_selected = pyqtSignal(object)       # LoopBookmark
+    sequential_started = pyqtSignal(object)      # SequentialPlayState
     sequential_stopped = pyqtSignal()
+    export_requested = pyqtSignal(int, int, str) # a_ms, b_ms, label
 
     def __init__(self, store: BookmarkStore, parent=None):
         super().__init__(parent)
@@ -113,6 +114,7 @@ class BookmarkPanel(QWidget):
             row.name_changed.connect(self._on_name_changed)
             row.enabled_changed.connect(self._on_enabled_changed)  # FR-006
             row.memo_clicked.connect(self._on_memo_clicked)  # US6
+            row.export_requested.connect(self.export_requested)  # 011
             item.setSizeHint(row.sizeHint())
             item.setData(Qt.ItemDataRole.UserRole, bm.id)
             self.list_widget.addItem(item)
