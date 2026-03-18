@@ -150,6 +150,33 @@ _STRINGS: dict[str, dict[str, str]] = {
                                      "en": "Source file not found: {path}"},
     "error.ffmpeg_error":           {"ja": "ffmpeg エラー (code {code}): {detail}",
                                      "en": "ffmpeg error (code {code}): {detail}"},
+    # ── 016-p1-features ────────────────────────────────────────────────────────
+    # F-201: 外部字幕ファイルの読み込み
+    "menu.playback.subtitle.open_file": {"ja": "字幕ファイルを開く...",          "en": "Open Subtitle File..."},
+    "msg.subtitle_no_video.title":      {"ja": "動画が開かれていません",          "en": "No Video Open"},
+    "msg.subtitle_no_video.body":       {"ja": "字幕ファイルを読み込むには動画を開いてください。", "en": "Please open a video to load a subtitle file."},
+    "msg.subtitle_bad_format.title":    {"ja": "非対応のファイル形式",            "en": "Unsupported File Format"},
+    "msg.subtitle_bad_format.body":     {"ja": "SRT または ASS 形式の字幕ファイルを選択してください。", "en": "Please select a subtitle file in SRT or ASS format."},
+    "msg.subtitle_load_error.title":    {"ja": "字幕読み込みエラー",              "en": "Subtitle Load Error"},
+    "msg.subtitle_load_error.body":     {"ja": "字幕ファイルの読み込みに失敗しました。UTF-8 形式のファイルを使用してください。", "en": "Failed to load subtitle file. Please use a UTF-8 encoded file."},
+    # F-403: ウィンドウ位置・サイズの記憶
+    "menu.view.reset_window":           {"ja": "ウィンドウ位置をリセット",        "en": "Reset Window Position"},
+    # F-502: ツールチップ
+    "tooltip.btn.play":                 {"ja": "再生/一時停止 (Space)",           "en": "Play/Pause (Space)"},
+    "tooltip.seekbar":                  {"ja": "クリックまたはドラッグで再生位置を変更", "en": "Click or drag to seek"},
+    "tooltip.volume":                   {"ja": "音量を調整 (↑/↓)",               "en": "Adjust volume (↑/↓)"},
+    "tooltip.btn.frame_minus":          {"ja": "1フレーム戻す (,)",               "en": "Go back 1 frame (,)"},
+    "tooltip.btn.frame_plus":           {"ja": "1フレーム進める (.)",             "en": "Go forward 1 frame (.)"},
+    "tooltip.btn.frame_a_minus":        {"ja": "A点を1フレーム前にずらす (Shift+,)", "en": "Move A point back 1 frame (Shift+,)"},
+    "tooltip.btn.frame_a_plus":         {"ja": "A点を1フレーム後にずらす (Shift+.)", "en": "Move A point forward 1 frame (Shift+.)"},
+    "tooltip.btn.frame_b_minus":        {"ja": "B点を1フレーム前にずらす (Ctrl+,)", "en": "Move B point back 1 frame (Ctrl+,)"},
+    "tooltip.btn.frame_b_plus":         {"ja": "B点を1フレーム後にずらす (Ctrl+.)", "en": "Move B point forward 1 frame (Ctrl+.)"},
+    "tooltip.btn.set_a":                {"ja": "A点を設定 (I)",                   "en": "Set point A (I)"},
+    "tooltip.btn.set_b":                {"ja": "B点を設定 (O)",                   "en": "Set point B (O)"},
+    "tooltip.btn.ab_loop":              {"ja": "ABループを切り替える",             "en": "Toggle AB loop"},
+    "tooltip.btn.edit_tags":            {"ja": "タグを編集",                      "en": "Edit tags"},
+    "tooltip.btn.reset_play_count":     {"ja": "再生回数をリセット",               "en": "Reset play count"},
+    "tooltip.pause_interval":           {"ja": "ループ間の一時停止時間（秒）",     "en": "Pause duration between loops (seconds)"},
 }
 
 # ── 公開 API ────────────────────────────────────────────────
