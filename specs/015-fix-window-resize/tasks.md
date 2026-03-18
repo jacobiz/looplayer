@@ -15,7 +15,7 @@
 
 **Purpose**: テストファイルの新規作成
 
-- [ ] T001 テストファイルのスケルトンを新規作成する in tests/unit/test_window_resize.py（必要な import と空のテストクラス TestResizeToVideo / TestPollTimeout / TestDeadCode を定義する）
+- [X] T001 テストファイルのスケルトンを新規作成する in tests/unit/test_window_resize.py（必要な import と空のテストクラス TestResizeToVideo / TestPollTimeout / TestDeadCode を定義する）
 
 ---
 
@@ -29,16 +29,16 @@
 
 > **Constitution I 必須: テストを書き、FAIL することを確認してから実装すること**
 
-- [ ] T002 [US1] `TestResizeToVideo.test_video_frame_height_matches_video` を書く — `_resize_to_video(1280, 720)` 後に `player.video_frame.height() == 720` となることを assert する in tests/unit/test_window_resize.py
-- [ ] T003 [US1] `TestResizeToVideo.test_window_height_includes_ui_offset` を書く — ウィンドウ高さが `720 + ui_h_offset` になることを assert する in tests/unit/test_window_resize.py
-- [ ] T004 [US1] `TestResizeToVideo.test_fullscreen_skips_resize` を書く — `isFullScreen()` が True のとき resize が呼ばれないことを assert する in tests/unit/test_window_resize.py
-- [ ] T005 [US1] `TestResizeToVideo.test_no_video_skips_resize` を書く — `video_get_size` が (0, 0) を返す状態で `_poll_video_size` を呼んでも `_resize_to_video` が呼ばれないことを assert する（FR-008: 動画なしでクラッシュしない）in tests/unit/test_window_resize.py
-- [ ] T006 [US1] `TestResizeToVideo.test_window_size_clamped_to_screen` を書く — 動画解像度がスクリーンサイズを超える場合（例: 9999×9999）にウィンドウが `avail.width()` / `avail.height()` 以下にクランプされることを assert する（FR-007）in tests/unit/test_window_resize.py
-- [ ] T007 [US1] T002〜T006 のテストが FAIL することを `pytest tests/unit/test_window_resize.py::TestResizeToVideo -v` で確認する
+- [X] T002 [US1] `TestResizeToVideo.test_video_frame_height_matches_video` を書く — `_resize_to_video(1280, 720)` 後に `player.video_frame.height() == 720` となることを assert する in tests/unit/test_window_resize.py
+- [X] T003 [US1] `TestResizeToVideo.test_window_height_includes_ui_offset` を書く — ウィンドウ高さが `720 + ui_h_offset` になることを assert する in tests/unit/test_window_resize.py
+- [X] T004 [US1] `TestResizeToVideo.test_fullscreen_skips_resize` を書く — `isFullScreen()` が True のとき resize が呼ばれないことを assert する in tests/unit/test_window_resize.py
+- [X] T005 [US1] `TestResizeToVideo.test_no_video_skips_resize` を書く — `video_get_size` が (0, 0) を返す状態で `_poll_video_size` を呼んでも `_resize_to_video` が呼ばれないことを assert する（FR-008: 動画なしでクラッシュしない）in tests/unit/test_window_resize.py
+- [X] T006 [US1] `TestResizeToVideo.test_window_size_clamped_to_screen` を書く — 動画解像度がスクリーンサイズを超える場合（例: 9999×9999）にウィンドウが `avail.width()` / `avail.height()` 以下にクランプされることを assert する（FR-007）in tests/unit/test_window_resize.py
+- [X] T007 [US1] T002〜T006 のテストが FAIL することを `pytest tests/unit/test_window_resize.py::TestResizeToVideo -v` で確認する
 
 ### 実装 for User Story 1
 
-- [ ] T008 [US1] `_resize_to_video` の高さ計算を修正する — `ui_h_offset = self.height() - self.video_frame.height()` を求め、`target_h = max(600, min(h + ui_h_offset, max_h))` に変更する in looplayer/player.py
+- [X] T008 [US1] `_resize_to_video` の高さ計算を修正する — `ui_h_offset = self.height() - self.video_frame.height()` を求め、`target_h = max(600, min(h + ui_h_offset, max_h))` に変更する in looplayer/player.py
 
 **Checkpoint**: `pytest tests/unit/test_window_resize.py::TestResizeToVideo -v` が全件 PASS すること
 
@@ -52,21 +52,21 @@
 
 ### セットアップ for User Story 2
 
-- [ ] T009 [US2] `__init__` に `self._size_poll_count: int = 0` を追加する in looplayer/player.py（US2 の実装が依存するカウンタ変数の初期化）
+- [X] T009 [US2] `__init__` に `self._size_poll_count: int = 0` を追加する in looplayer/player.py（US2 の実装が依存するカウンタ変数の初期化）
 
 ### テスト for User Story 2
 
 > **Constitution I 必須: テストを書き、FAIL することを確認してから実装すること**
 
-- [ ] T010 [US2] `TestPollTimeout.test_timer_stops_after_100_polls` を書く — `video_get_size` を (0,0) に patch した状態で `_poll_video_size` を 100 回呼び、タイマーが停止していることを assert する in tests/unit/test_window_resize.py
-- [ ] T011 [US2] `TestPollTimeout.test_timer_stops_immediately_on_valid_size` を書く — `video_get_size` が (1280, 720) を返す状態で `_poll_video_size` を 1 回呼び、タイマーが停止していることを assert する in tests/unit/test_window_resize.py
-- [ ] T012 [US2] `TestPollTimeout.test_start_size_poll_resets_count` を書く — `_start_size_poll` 呼び出し後に `_size_poll_count == 0` であることを assert する in tests/unit/test_window_resize.py
-- [ ] T013 [US2] T010〜T012 のテストが FAIL することを `pytest tests/unit/test_window_resize.py::TestPollTimeout -v` で確認する
+- [X] T010 [US2] `TestPollTimeout.test_timer_stops_after_100_polls` を書く — `video_get_size` を (0,0) に patch した状態で `_poll_video_size` を 100 回呼び、タイマーが停止していることを assert する in tests/unit/test_window_resize.py
+- [X] T011 [US2] `TestPollTimeout.test_timer_stops_immediately_on_valid_size` を書く — `video_get_size` が (1280, 720) を返す状態で `_poll_video_size` を 1 回呼び、タイマーが停止していることを assert する in tests/unit/test_window_resize.py
+- [X] T012 [US2] `TestPollTimeout.test_start_size_poll_resets_count` を書く — `_start_size_poll` 呼び出し後に `_size_poll_count == 0` であることを assert する in tests/unit/test_window_resize.py
+- [X] T013 [US2] T010〜T012 のテストが FAIL することを `pytest tests/unit/test_window_resize.py::TestPollTimeout -v` で確認する
 
 ### 実装 for User Story 2
 
-- [ ] T014 [US2] `_start_size_poll` を修正する — `self._size_poll_count = 0` のリセットを追加する（`_user_resized` の削除は US3 で行うため、ここでは削除しない）in looplayer/player.py
-- [ ] T015 [US2] `_poll_video_size` にタイムアウト処理を追加する — メソッド冒頭で `self._size_poll_count += 1` し、`>= 100` なら `self._size_poll_timer.stop()` して return する in looplayer/player.py
+- [X] T014 [US2] `_start_size_poll` を修正する — `self._size_poll_count = 0` のリセットを追加する（`_user_resized` の削除は US3 で行うため、ここでは削除しない）in looplayer/player.py
+- [X] T015 [US2] `_poll_video_size` にタイムアウト処理を追加する — メソッド冒頭で `self._size_poll_count += 1` し、`>= 100` なら `self._size_poll_timer.stop()` して return する in looplayer/player.py
 
 **Checkpoint**: `pytest tests/unit/test_window_resize.py::TestPollTimeout -v` が全件 PASS すること
 
@@ -82,13 +82,13 @@
 
 > **Constitution I 必須: テストを書き、FAIL することを確認してから実装すること**
 
-- [ ] T016 [US3] `TestDeadCode.test_user_resized_flag_does_not_exist` を書く — `player._start_size_poll()` を呼び出した後に `hasattr(player, '_user_resized')` が False であることを assert する（呼び出し後に確認することで _start_size_poll に `_user_resized = False` が残っている場合に FAIL させる）in tests/unit/test_window_resize.py
-- [ ] T017 [US3] `TestDeadCode.test_on_vlc_video_changed_does_not_exist` を書く — `hasattr(player, '_on_vlc_video_changed')` が False であることを assert する in tests/unit/test_window_resize.py
-- [ ] T018 [US3] T016〜T017 のテストが FAIL することを `pytest tests/unit/test_window_resize.py::TestDeadCode -v` で確認する
+- [X] T016 [US3] `TestDeadCode.test_user_resized_flag_does_not_exist` を書く — `player._start_size_poll()` を呼び出した後に `hasattr(player, '_user_resized')` が False であることを assert する（呼び出し後に確認することで _start_size_poll に `_user_resized = False` が残っている場合に FAIL させる）in tests/unit/test_window_resize.py
+- [X] T017 [US3] `TestDeadCode.test_on_vlc_video_changed_does_not_exist` を書く — `hasattr(player, '_on_vlc_video_changed')` が False であることを assert する in tests/unit/test_window_resize.py
+- [X] T018 [US3] T016〜T017 のテストが FAIL することを `pytest tests/unit/test_window_resize.py::TestDeadCode -v` で確認する
 
 ### 実装 for User Story 3
 
-- [ ] T019 [US3] デッドコードを削除する — `_start_size_poll` から `self._user_resized = False` を削除し、`_on_vlc_video_changed` メソッド全体を削除する in looplayer/player.py
+- [X] T019 [US3] デッドコードを削除する — `_start_size_poll` から `self._user_resized = False` を削除し、`_on_vlc_video_changed` メソッド全体を削除する in looplayer/player.py
 
 **Checkpoint**: `pytest tests/unit/test_window_resize.py -v` が全件 PASS すること
 
@@ -98,8 +98,8 @@
 
 **Purpose**: 全体の動作確認と回帰テスト
 
-- [ ] T020 全テストスイートを実行して回帰がないことを確認する — `pytest tests/ --ignore=tests/unit/test_updater.py --ignore=tests/integration/test_auto_update.py -v` を実行し 442 件以上が PASS すること
-- [ ] T021 変更内容をコミットして 015-fix-window-resize ブランチを push する
+- [X] T020 全テストスイートを実行して回帰がないことを確認する — `pytest tests/ --ignore=tests/unit/test_updater.py --ignore=tests/integration/test_auto_update.py -v` を実行し 442 件以上が PASS すること（452 件 PASS）
+- [X] T021 変更内容をコミットして 015-fix-window-resize ブランチを push する
 
 ---
 
