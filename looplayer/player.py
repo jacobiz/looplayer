@@ -1454,11 +1454,13 @@ class VideoPlayer(QMainWindow):
 
         media = self.media_player.get_media()
         if media is not None:
-            media.parse()
+            # media.parse() は非推奨・UI スレッドをブロックするため使用しない。
+            # 再生済みメディアのトラック情報は parse なしで取得できる。
             tracks = media.tracks_get()
             if tracks:
                 for track in tracks:
-                    if track.type == vlc.TrackType.Video and resolution_str == "不明":
+                    # python-vlc 3.0.x では TrackType 属性名は小文字（.video / .audio）
+                    if track.type == vlc.TrackType.video and resolution_str == "不明":
                         v = track.video.contents if track.video else None
                         if v:
                             if v.width and v.height:
@@ -1468,13 +1470,13 @@ class VideoPlayer(QMainWindow):
                                 fps_str = f"{fps_val:.2f}"
                         if track.codec:
                             desc = vlc.libvlc_media_get_codec_description(
-                                vlc.TrackType.Video, track.codec
+                                vlc.TrackType.video, track.codec
                             )
                             video_codec_str = desc if desc else "不明"
-                    elif track.type == vlc.TrackType.Audio and audio_codec_str == "不明":
+                    elif track.type == vlc.TrackType.audio and audio_codec_str == "不明":
                         if track.codec:
                             desc = vlc.libvlc_media_get_codec_description(
-                                vlc.TrackType.Audio, track.codec
+                                vlc.TrackType.audio, track.codec
                             )
                             audio_codec_str = desc if desc else "不明"
 
