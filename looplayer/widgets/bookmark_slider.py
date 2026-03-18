@@ -14,13 +14,16 @@ _COLORS = [
 ]
 _CURRENT_COLOR = QColor(255, 255,   0, 180)  # 強調表示用（黄色・高不透明）
 _MIN_BAR_WIDTH = 4  # 最小クリック可能幅（px）
+_AB_LINE_COLOR = QColor(255, 255, 255, 200)  # US2: AB 点縦線（白・高不透明）
+_AB_BAR_COLOR  = QColor(255, 255, 255, 120)  # US2: AB 点バー（白・半透明）
 
 
 class BookmarkSlider(QSlider):
     """ブックマーク区間バーを重ね描きするシークスライダー（FR-001〜FR-005）。"""
 
-    bookmark_bar_clicked = pyqtSignal(str)  # クリックされたブックマークの ID
-    seek_requested = pyqtSignal(int)        # トラッククリック/ドラッグ時のシーク位置（ms）
+    bookmark_bar_clicked = pyqtSignal(str)   # クリックされたブックマークの ID
+    seek_requested = pyqtSignal(int)         # トラッククリック/ドラッグ時のシーク位置（ms）
+    ab_point_drag_finished = pyqtSignal(str, int)  # US3: "a"/"b" と確定 ms 値
 
     def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None):
         super().__init__(orientation, parent)
@@ -33,9 +36,6 @@ class BookmarkSlider(QSlider):
         self._ab_preview_b: int | None = None
         # US3: AB 点ドラッグターゲット
         self._ab_drag_target: str | None = None
-
-    # ── シグナル ─────────────────────────────────────────────
-    ab_point_drag_finished = pyqtSignal(str, int)  # US3: "a"/"b" と確定 ms 値
 
     # ── 外部インターフェース ──────────────────────────────────
 
@@ -134,9 +134,6 @@ class BookmarkSlider(QSlider):
             return
         if self._duration_ms <= 0:
             return
-
-        _AB_LINE_COLOR = QColor(255, 255, 255, 200)   # 白・高不透明（縦線）
-        _AB_BAR_COLOR = QColor(255, 255, 255, 120)    # 白・半透明（バー）
 
         if a_ms is not None and b_ms is not None:
             # A・B 両方設定済み：半透明バー + 両端縦線

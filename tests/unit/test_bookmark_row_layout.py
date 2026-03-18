@@ -31,7 +31,6 @@ class TestSpinboxWidth:
 
     def test_repeat_spin_not_fixed_width(self, row):
         """repeat_spin が fixedWidth でないこと（最大幅が QWIDGETSIZE_MAX）。"""
-        from PyQt6.QtWidgets import QSizePolicy
         # fixedWidth 設定時は minimumWidth == maximumWidth になる
         # setMinimumWidth に変更後は maximumWidth が QWIDGETSIZE_MAX (16777215) になる
         assert row.repeat_spin.maximumWidth() > 68, (

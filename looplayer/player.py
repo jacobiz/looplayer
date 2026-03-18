@@ -1230,6 +1230,13 @@ class VideoPlayer(QMainWindow):
             self.ab_point_a = ms
         elif target == "b":
             self.ab_point_b = ms
+        # A >= B になった場合はループを無効化（防御的ガード）
+        if (
+            self.ab_point_a is not None
+            and self.ab_point_b is not None
+            and self.ab_point_a >= self.ab_point_b
+        ):
+            self.ab_loop_active = False
         self._update_ab_info()
         self._update_save_btn_state()
         self.seek_slider.set_ab_preview(self.ab_point_a, self.ab_point_b)
