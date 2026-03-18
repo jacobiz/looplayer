@@ -48,8 +48,10 @@ Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-; アプリ本体（PyInstaller の onefile 出力）
-Source: "..\dist\looplay.exe"; DestDir: "{app}"; Flags: ignoreversion
+; アプリ本体（PyInstaller の onedir 出力）
+; onefile → onedir 変更により %TEMP% 展開がなくなり Defender 誤検知クラッシュを回避
+Source: "..\dist\looplay\looplay.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\looplay\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 ; スタートメニュー

@@ -30,9 +30,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='looplay',
     debug=False,
     bootloader_ignore_signals=False,
@@ -44,5 +43,15 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    onefile=True,
+)
+
+# onedir モード: DLL をインストール先フォルダに固定配置する
+# （onefile の %TEMP% 展開 → Defender スキャン → クラッシュ を回避）
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    name='looplay',
 )
