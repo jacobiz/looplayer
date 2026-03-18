@@ -72,6 +72,7 @@ class VideoPlayer(QMainWindow):
         self._size_poll_timer.setInterval(50)
         self._size_poll_timer.timeout.connect(self._poll_video_size)
         self._auto_resizing = False
+        self._size_poll_count: int = 0
 
         # US4: フルスクリーン中カーソル自動非表示
         self._cursor_hide_timer = QTimer(self)
@@ -786,21 +787,23 @@ class VideoPlayer(QMainWindow):
 
     # ── US3: ウィンドウリサイズ ──────────────────────────────
 
-    def _on_vlc_video_changed(self) -> None:
-        """動画変更時に呼ばれる → シグナル経由でポーリングを開始。"""
-        self._video_changed.emit()
-
     def _start_size_poll(self) -> None:
         """UI スレッドでポーリングタイマーを開始する。"""
-        self._user_resized = False
+        self._size_poll_count = 0
         self._size_poll_timer.start()
 
     def _poll_video_size(self) -> None:
-        """50ms ごとに動画サイズを確認し、非ゼロになったらリサイズしてタイマーを停止。"""
+        """50ms ごとに動画サイズを確認し、非ゼロになったらリサイズしてタイマーを停止。
+        100 回（5秒）経過しても動画サイズが取得できない場合はタイマーを強制停止する。
+        """
         w, h = self.media_player.video_get_size()
         if w and h:
             self._size_poll_timer.stop()
             self._resize_to_video(w, h)
+            return
+        self._size_poll_count += 1
+        if self._size_poll_count >= 100:
+            self._size_poll_timer.stop()
 
     def _resize_to_video(self, w: int, h: int) -> None:
         """動画解像度に合わせてウィンドウをリサイズする（クランプあり）。"""
@@ -812,8 +815,11 @@ class VideoPlayer(QMainWindow):
             max_w, max_h = avail.width(), avail.height()
         else:
             max_w, max_h = 1920, 1080
+        # タイトルバー＋コントロール分の高さを加算してウィンドウサイズを求める
+        ui_h_offset = self.height() - self.video_frame.height()
+        # 幅方向は video_frame.width() == window.width() のため補正不要
         target_w = max(800, min(w, max_w))
-        target_h = max(600, min(h, max_h))
+        target_h = max(600, min(h + ui_h_offset, max_h))
         # 自動リサイズ中フラグを立てて resizeEvent が誤ってタイマーを止めないようにする
         self._auto_resizing = True
         try:
