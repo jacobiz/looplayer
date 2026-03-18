@@ -145,3 +145,120 @@ def test_check_update_on_startup_true_after_reenable(tmp_path):
     with patch("looplayer.app_settings._SETTINGS_PATH", settings_file):
         s2 = AppSettings()
         assert s2.check_update_on_startup is True
+
+
+# ── T006: AppSettings キャッシュフィールドテスト ─────────────────────────────
+
+
+def test_last_update_check_ts_default_is_zero(tmp_path):
+    """last_update_check_ts のデフォルトは 0.0。"""
+    with patch("looplayer.app_settings._SETTINGS_PATH", tmp_path / "settings.json"):
+        s = AppSettings()
+        assert s.last_update_check_ts == 0.0
+
+
+def test_update_check_etag_default_is_empty(tmp_path):
+    """update_check_etag のデフォルトは空文字列。"""
+    with patch("looplayer.app_settings._SETTINGS_PATH", tmp_path / "settings.json"):
+        s = AppSettings()
+        assert s.update_check_etag == ""
+
+
+def test_cache_fields_save_and_reload(tmp_path):
+    """last_update_check_ts と update_check_etag を保存・再読み込みできる。"""
+    settings_file = tmp_path / "settings.json"
+    with patch("looplayer.app_settings._SETTINGS_PATH", settings_file):
+        s = AppSettings()
+        s.last_update_check_ts = 1_700_000_000.0
+        s.update_check_etag = '"abc123"'
+
+    with patch("looplayer.app_settings._SETTINGS_PATH", settings_file):
+        s2 = AppSettings()
+        assert s2.last_update_check_ts == 1_700_000_000.0
+        assert s2.update_check_etag == '"abc123"'
+
+
+# ── T007: UpdateChecker キャッシュ・ETag テスト ──────────────────────────────
+
+
+def _make_settings_mock(last_ts: float = 0.0, etag: str = "") -> MagicMock:
+    """AppSettings のモックを作成する。"""
+    m = MagicMock()
+    m.last_update_check_ts = last_ts
+    m.update_check_etag = etag
+    return m
+
+
+def test_update_checker_skips_when_checked_recently(qtbot):
+    """前回チェックから 24h 未満の場合は API を叩かずに up_to_date を発行する。"""
+    import time
+    settings = _make_settings_mock(last_ts=time.time())  # 今チェック済み
+    with patch("looplayer.updater.urllib.request.urlopen") as mock_urlopen:
+        checker = UpdateChecker("1.0.0", settings=settings)
+        with qtbot.waitSignal(checker.up_to_date, timeout=5000):
+            checker.start()
+        checker.wait()
+    mock_urlopen.assert_not_called()
+
+
+def test_update_checker_sends_etag_header(qtbot):
+    """保存済み ETag を If-None-Match ヘッダーに付与して送信する。"""
+    import urllib.request as urllib_req
+    api_response = {"tag_name": "v1.0.0", "assets": []}
+    settings = _make_settings_mock(last_ts=0.0, etag='"saved-etag"')
+
+    captured_headers = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured_headers.update(req.headers)
+        return _make_urlopen_mock(api_response)(req, timeout=timeout)
+
+    with patch("looplayer.updater.urllib.request.urlopen", fake_urlopen):
+        checker = UpdateChecker("1.0.0", settings=settings)
+        with qtbot.waitSignal(checker.up_to_date, timeout=5000):
+            checker.start()
+        checker.wait()
+
+    assert "If-none-match" in captured_headers  # urllib は先頭大文字・残り小文字
+    assert captured_headers["If-none-match"] == '"saved-etag"'
+
+
+def test_update_checker_handles_304_as_up_to_date(qtbot):
+    """304 Not Modified のとき up_to_date を発行し、タイムスタンプを更新する。"""
+    import time
+    import urllib.error
+    settings = _make_settings_mock(last_ts=0.0)
+
+    err_304 = urllib.error.HTTPError(
+        url=None, code=304, msg="Not Modified", hdrs={}, fp=None
+    )
+    before = time.time()
+    with patch("looplayer.updater.urllib.request.urlopen", side_effect=err_304):
+        checker = UpdateChecker("1.0.0", settings=settings)
+        with qtbot.waitSignal(checker.up_to_date, timeout=5000):
+            checker.start()
+        checker.wait()
+
+    # タイムスタンプが更新されていること（before 以降の値が設定される）
+    assert settings.last_update_check_ts >= before
+
+
+def test_update_checker_saves_etag_on_200(qtbot):
+    """200 レスポンスで ETag ヘッダーがある場合、settings に保存する。"""
+    api_response = {"tag_name": "v1.0.0", "assets": []}
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps(api_response).encode()
+    mock_resp.headers = {"ETag": '"new-etag"'}
+    mock_cm = MagicMock()
+    mock_cm.__enter__ = MagicMock(return_value=mock_resp)
+    mock_cm.__exit__ = MagicMock(return_value=False)
+
+    settings = _make_settings_mock(last_ts=0.0)
+    with patch("looplayer.updater.urllib.request.urlopen", return_value=mock_cm):
+        checker = UpdateChecker("1.0.0", settings=settings)
+        with qtbot.waitSignal(checker.up_to_date, timeout=5000):
+            checker.start()
+        checker.wait()
+
+    assert settings.update_check_etag == '"new-etag"'

@@ -3,6 +3,8 @@ import json
 import sys
 import subprocess
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -17,6 +19,7 @@ from looplayer.i18n import t
 
 _API_URL = "https://api.github.com/repos/jacobiz/looplayer/releases/latest"
 _TIMEOUT = 5  # 秒
+_CHECK_INTERVAL_SECS = 86400  # 24時間キャッシュ
 
 
 # ── バージョン比較 ────────────────────────────────────────────────────────────
@@ -42,21 +45,46 @@ class UpdateChecker(QThread):
     up_to_date = pyqtSignal()
     check_failed = pyqtSignal(str)           # error_message
 
-    def __init__(self, current_version: str = VERSION, parent=None):
+    def __init__(self, current_version: str = VERSION, settings=None, parent=None):
         super().__init__(parent)
         self._current_version = current_version
+        self._settings = settings  # AppSettings | None
 
     def run(self) -> None:
+        # 24h キャッシュ: 前回チェックから _CHECK_INTERVAL_SECS 未満なら API を叩かない
+        if self._settings is not None:
+            elapsed = time.time() - self._settings.last_update_check_ts
+            if elapsed < _CHECK_INTERVAL_SECS:
+                self.up_to_date.emit()
+                return
+
+        headers = {"User-Agent": f"looplay!/{self._current_version}"}
+        if self._settings is not None and self._settings.update_check_etag:
+            headers["If-None-Match"] = self._settings.update_check_etag
+
         try:
-            req = urllib.request.Request(
-                _API_URL,
-                headers={"User-Agent": f"looplay!/{self._current_version}"},
-            )
+            req = urllib.request.Request(_API_URL, headers=headers)
             with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+                etag = resp.headers.get("ETag", "")
                 data = json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 304:
+                # 304 Not Modified: データ未変更 → タイムスタンプのみ更新
+                if self._settings is not None:
+                    self._settings.last_update_check_ts = time.time()
+                self.up_to_date.emit()
+                return
+            self.check_failed.emit(str(e))
+            return
         except Exception as e:
             self.check_failed.emit(str(e))
             return
+
+        # ETag とタイムスタンプを保存
+        if self._settings is not None:
+            if etag:
+                self._settings.update_check_etag = etag
+            self._settings.last_update_check_ts = time.time()
 
         tag = data.get("tag_name", "")
         if not tag:

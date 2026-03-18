@@ -1646,7 +1646,7 @@ class VideoPlayer(QMainWindow):
 
     def _start_update_check(self, silent: bool = False) -> None:
         """UpdateChecker を起動する。silent=True の場合、エラーを無視する。"""
-        checker = UpdateChecker(parent=self)
+        checker = UpdateChecker(settings=self._app_settings, parent=self)
         checker.update_available.connect(self._on_update_available)
         if silent:
             checker.up_to_date.connect(checker.deleteLater)

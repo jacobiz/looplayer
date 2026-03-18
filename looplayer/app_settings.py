@@ -73,3 +73,23 @@ class AppSettings:
             raise ValueError(f"Invalid export_encode_mode: {value!r}")
         self._data["export_encode_mode"] = value
         self.save()
+
+    @property
+    def last_update_check_ts(self) -> float:
+        """前回の更新チェック時刻（Unix タイムスタンプ）。未チェックは 0.0。"""
+        return float(self._data.get("last_update_check_ts", 0.0))
+
+    @last_update_check_ts.setter
+    def last_update_check_ts(self, value: float) -> None:
+        self._data["last_update_check_ts"] = value
+        self.save()
+
+    @property
+    def update_check_etag(self) -> str:
+        """GitHub API の前回レスポンス ETag。未取得は空文字列。"""
+        return str(self._data.get("update_check_etag", ""))
+
+    @update_check_etag.setter
+    def update_check_etag(self, value: str) -> None:
+        self._data["update_check_etag"] = value
+        self.save()
