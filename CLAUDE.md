@@ -68,6 +68,7 @@ pytest tests/unit/ -v   # ユニットテストのみ
 - Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203、ffmpeg（US10 のトランスコード用、既存） (012-player-improvements)
 - `~/.looplayer/bookmarks.json`（LoopBookmark 拡張）、`~/.looplayer/settings.json`（AppSettings 拡張） (012-player-improvements)
 - `~/.looplayer/bookmarks.json`（既存、変更なし） (013-player-ui-fixes)
+- Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 (015-fix-window-resize)
 
 ## Recent Changes
 - 012-player-improvements: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203、ffmpeg（US10 のトランスコード用、既存）
