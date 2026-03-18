@@ -174,6 +174,7 @@ class VideoPlayer(QMainWindow):
         self.seek_slider.sliderMoved.connect(self._on_seek)
         self.seek_slider.bookmark_bar_clicked.connect(self._on_bookmark_bar_clicked)
         self.seek_slider.seek_requested.connect(self._on_seek_ms)
+        self.seek_slider.ab_point_drag_finished.connect(self._on_ab_drag_finished)  # US3
         seek_layout.addWidget(self.seek_slider)
         seek_layout.addWidget(self.time_label)
         controls_layout.addLayout(seek_layout)
@@ -408,6 +409,12 @@ class VideoPlayer(QMainWindow):
         esc_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         esc_action.triggered.connect(self._exit_fullscreen)
         view_menu.addAction(esc_action)
+        # メニューバー非表示時（フルスクリーン中）でも ESC が確実に機能するよう
+        # QShortcut を MainWindow に直接追加する（QAction ショートカットはメニューバー
+        # が hide() されると ApplicationShortcut でも機能しなくなるため）
+        esc_sc = QShortcut(QKeySequence("Escape"), self)
+        esc_sc.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        esc_sc.activated.connect(self._exit_fullscreen)
 
         view_menu.addSeparator()
 
@@ -1186,6 +1193,7 @@ class VideoPlayer(QMainWindow):
         self.ab_point_a = pos_ms
         self._update_ab_info()
         self._update_save_btn_state()
+        self.seek_slider.set_ab_preview(self.ab_point_a, self.ab_point_b)  # US2
 
     def set_point_b(self):
         pos_ms = self.media_player.get_time()
@@ -1194,6 +1202,7 @@ class VideoPlayer(QMainWindow):
         self.ab_point_b = pos_ms
         self._update_ab_info()
         self._update_save_btn_state()
+        self.seek_slider.set_ab_preview(self.ab_point_a, self.ab_point_b)  # US2
 
     def toggle_ab_loop(self, checked):
         if checked and self.ab_point_a is not None and self.ab_point_b is not None:
@@ -1213,6 +1222,17 @@ class VideoPlayer(QMainWindow):
         self.ab_toggle_btn.setText(t("btn.ab_loop_off"))
         self._update_ab_info()
         self._update_save_btn_state()
+        self.seek_slider.set_ab_preview(None, None)  # US2
+
+    def _on_ab_drag_finished(self, target: str, ms: int) -> None:
+        """US3: AB 点マーカーのドラッグ完了時に呼ばれ、AB 点を更新する。"""
+        if target == "a":
+            self.ab_point_a = ms
+        elif target == "b":
+            self.ab_point_b = ms
+        self._update_ab_info()
+        self._update_save_btn_state()
+        self.seek_slider.set_ab_preview(self.ab_point_a, self.ab_point_b)
 
     def _update_ab_info(self):
         a_str = ms_to_str(self.ab_point_a) if self.ab_point_a is not None else "--"

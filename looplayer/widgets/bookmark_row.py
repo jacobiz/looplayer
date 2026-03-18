@@ -70,7 +70,7 @@ class BookmarkRow(QWidget):
         self.repeat_spin.setMinimum(1)
         self.repeat_spin.setMaximum(99)
         self.repeat_spin.setValue(bm.repeat_count)
-        self.repeat_spin.setFixedWidth(55)
+        self.repeat_spin.setMinimumWidth(68)
         self.repeat_spin.valueChanged.connect(
             lambda v: self.repeat_changed.emit(self.bookmark_id, v)
         )
@@ -134,7 +134,7 @@ class BookmarkRow(QWidget):
         self.pause_spin.setSingleStep(0.5)
         self.pause_spin.setDecimals(1)
         self.pause_spin.setValue(bm.pause_ms / 1000.0)
-        self.pause_spin.setFixedWidth(64)
+        self.pause_spin.setMinimumWidth(75)
         self.pause_spin.valueChanged.connect(
             lambda v: self.pause_ms_changed.emit(self.bookmark_id, int(v * 1000))
         )

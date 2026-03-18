@@ -70,6 +70,38 @@ class TestEscapeExitsFullscreen:
         assert not player.isFullScreen()
 
 
+class TestEscapeShortcut:
+    """QShortcut 経由の ESC キーによるフルスクリーン解除テスト（US1）。"""
+
+    def test_esc_shortcut_is_registered(self, player, qtbot):
+        """QShortcut が MainWindow に登録されており _exit_fullscreen に接続されていることを確認する。"""
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        shortcuts = player.findChildren(QShortcut)
+        esc_shortcuts = [s for s in shortcuts if s.key() == QKeySequence("Escape")]
+        assert len(esc_shortcuts) >= 1, "QShortcut(Escape) が MainWindow に登録されていない"
+
+    def test_esc_shortcut_exits_fullscreen(self, player, qtbot):
+        """フルスクリーン中に QShortcut(Escape) を発火すると通常ウィンドウに戻る。"""
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        player.toggle_fullscreen()
+        assert player.isFullScreen()
+        shortcuts = player.findChildren(QShortcut)
+        esc_shortcuts = [s for s in shortcuts if s.key() == QKeySequence("Escape")]
+        assert esc_shortcuts, "QShortcut(Escape) が登録されていない"
+        esc_shortcuts[0].activated.emit()
+        assert not player.isFullScreen()
+
+    def test_esc_shortcut_no_effect_in_normal_window(self, player, qtbot):
+        """通常ウィンドウ中に QShortcut(Escape) を発火しても何も変化しない。"""
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        assert not player.isFullScreen()
+        shortcuts = player.findChildren(QShortcut)
+        esc_shortcuts = [s for s in shortcuts if s.key() == QKeySequence("Escape")]
+        assert esc_shortcuts, "QShortcut(Escape) が登録されていない"
+        esc_shortcuts[0].activated.emit()
+        assert not player.isFullScreen()
+
+
 class TestABLoopPreservedInFullscreen:
     def test_ab_loop_state_preserved_through_fullscreen(self, player, qtbot):
         player.ab_point_a = 1000
