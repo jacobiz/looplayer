@@ -86,16 +86,30 @@ class TestResizeToVideo:
         """動画解像度がスクリーンサイズを超える場合にクランプされること（FR-007）。
 
         9999×9999 の動画でも avail.width() / avail.height() 以下になる。
+        また、h + ui_h_offset が avail_h を 1px 超える境界値でも正しくクランプされること。
         """
         avail_w, avail_h = 1920, 1080
+        ui_h_offset = player.height() - player.video_frame.height()
+
         with patch.object(player, 'isFullScreen', return_value=False):
             mock_screen = MagicMock()
             mock_screen.availableGeometry.return_value.width.return_value = avail_w
             mock_screen.availableGeometry.return_value.height.return_value = avail_h
             with patch.object(player, 'screen', return_value=mock_screen):
+                # 大幅超過ケース
                 player._resize_to_video(9999, 9999)
-        assert player.width() <= avail_w
-        assert player.height() <= avail_h
+                assert player.width() <= avail_w
+                assert player.height() <= avail_h
+
+                # 境界値: h + ui_h_offset が avail_h を 1px 超えるケース（クランプが効く）
+                just_over = avail_h - ui_h_offset + 1
+                player._resize_to_video(800, just_over)
+                assert player.height() == avail_h
+
+                # 境界値: h + ui_h_offset がちょうど avail_h に収まるケース（クランプなし）
+                just_under = avail_h - ui_h_offset
+                player._resize_to_video(800, just_under)
+                assert player.height() == avail_h
 
 
 class TestPollTimeout:
@@ -130,11 +144,12 @@ class TestDeadCode:
     """デッドコード削除のユニットテスト（US3）。"""
 
     def test_user_resized_flag_does_not_exist(self, player: VideoPlayer):
-        """_start_size_poll() 呼び出し後に _user_resized 属性が存在しないこと。
+        """_user_resized 属性が __init__ 後・_start_size_poll() 後のいずれにも存在しないこと。
 
-        _start_size_poll() 後に確認することで、メソッド内に
-        self._user_resized = False が残っている場合に FAIL する。
+        __init__ 時点のチェックで self._user_resized = False が __init__ に残っていれば FAIL。
+        _start_size_poll() 後のチェックで同代入が _start_size_poll に残っていれば FAIL。
         """
+        assert not hasattr(player, '_user_resized')
         player._start_size_poll()
         assert not hasattr(player, '_user_resized')
 
