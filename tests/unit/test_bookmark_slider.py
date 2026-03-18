@@ -299,3 +299,127 @@ class TestBookmarkBarClickRegression:
         hit_x = groove.left() + int(groove.width() * 0.8)
         QTest.mouseClick(slider, Qt.MouseButton.LeftButton, pos=QPoint(hit_x, slider.height() // 2))
         assert len(bm_clicked) == 0
+
+
+class TestAbPreview:
+    """AB 点プレビュー表示テスト（US2）。"""
+
+    def test_set_ab_preview_a_only(self, slider):
+        """set_ab_preview(a_ms, None) 後に _ab_preview_a が設定値、_ab_preview_b が None になる。"""
+        slider.set_ab_preview(3000, None)
+        assert slider._ab_preview_a == 3000
+        assert slider._ab_preview_b is None
+
+    def test_set_ab_preview_both(self, slider):
+        """set_ab_preview(a_ms, b_ms) 後に両属性が正しく設定される。"""
+        slider.set_ab_preview(2000, 8000)
+        assert slider._ab_preview_a == 2000
+        assert slider._ab_preview_b == 8000
+
+    def test_set_ab_preview_clear(self, slider):
+        """set_ab_preview(None, None) 後に両属性が None になる。"""
+        slider.set_ab_preview(1000, 5000)
+        slider.set_ab_preview(None, None)
+        assert slider._ab_preview_a is None
+        assert slider._ab_preview_b is None
+
+
+class TestAbDrag:
+    """AB 点マーカードラッグテスト（US3）。"""
+
+    def test_mousepress_near_a_sets_drag_target_a(self, slider, qtbot):
+        """A 点マーカー付近（±6px）でマウスプレスすると _ab_drag_target が 'a' になる。"""
+        slider.set_bookmarks([], duration_ms=10000)
+        slider.set_ab_preview(5000, 8000)
+        slider.resize(500, 30)
+        slider.show()
+        groove = slider._groove_rect()
+        if groove.width() == 0:
+            pytest.skip("ヘッドレス環境のためグルーブ幅が 0 です")
+        from PyQt6.QtCore import QPoint
+        from PyQt6.QtTest import QTest
+        xa = slider._ms_to_x(5000, groove)
+        QTest.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(xa, slider.height() // 2))
+        assert slider._ab_drag_target == "a"
+        QTest.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(xa, slider.height() // 2))
+
+    def test_mousepress_near_b_sets_drag_target_b(self, slider, qtbot):
+        """B 点マーカー付近でマウスプレスすると _ab_drag_target が 'b' になる。"""
+        slider.set_bookmarks([], duration_ms=10000)
+        slider.set_ab_preview(2000, 7000)
+        slider.resize(500, 30)
+        slider.show()
+        groove = slider._groove_rect()
+        if groove.width() == 0:
+            pytest.skip("ヘッドレス環境のためグルーブ幅が 0 です")
+        from PyQt6.QtCore import QPoint
+        from PyQt6.QtTest import QTest
+        xb = slider._ms_to_x(7000, groove)
+        QTest.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(xb, slider.height() // 2))
+        assert slider._ab_drag_target == "b"
+        QTest.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(xb, slider.height() // 2))
+
+    def test_mouserelease_emits_ab_drag_finished(self, slider, qtbot):
+        """ドラッグ後にマウスリリースすると ab_point_drag_finished が emit され _ab_drag_target が None にリセット。"""
+        slider.set_bookmarks([], duration_ms=10000)
+        slider.set_ab_preview(3000, 8000)
+        slider.resize(500, 30)
+        slider.show()
+        groove = slider._groove_rect()
+        if groove.width() == 0:
+            pytest.skip("ヘッドレス環境のためグルーブ幅が 0 です")
+        from PyQt6.QtCore import QPoint
+        from PyQt6.QtTest import QTest
+        emitted = []
+        slider.ab_point_drag_finished.connect(lambda t, ms: emitted.append((t, ms)))
+        xa = slider._ms_to_x(3000, groove)
+        xb_new = slider._ms_to_x(4000, groove)
+        QTest.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(xa, slider.height() // 2))
+        QTest.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(xb_new, slider.height() // 2))
+        assert len(emitted) >= 1
+        assert emitted[0][0] == "a"
+        assert slider._ab_drag_target is None
+
+    def test_a_drag_clamped_at_b_point(self, slider, qtbot):
+        """A 点を B 点より右にドラッグしようとした場合、emit される ms 値が B 点 ms より小さくクランプされる。"""
+        slider.set_bookmarks([], duration_ms=10000)
+        slider.set_ab_preview(3000, 6000)
+        slider.resize(500, 30)
+        slider.show()
+        groove = slider._groove_rect()
+        if groove.width() == 0:
+            pytest.skip("ヘッドレス環境のためグルーブ幅が 0 です")
+        from PyQt6.QtCore import QPoint
+        from PyQt6.QtTest import QTest
+        emitted = []
+        slider.ab_point_drag_finished.connect(lambda t, ms: emitted.append((t, ms)))
+        xa = slider._ms_to_x(3000, groove)
+        # B 点(6000ms)より右（9000ms 相当）にドラッグ
+        x_beyond_b = slider._ms_to_x(9000, groove)
+        QTest.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(xa, slider.height() // 2))
+        QTest.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(x_beyond_b, slider.height() // 2))
+        assert len(emitted) >= 1
+        assert emitted[0][0] == "a"
+        assert emitted[0][1] < 6000, f"A 点が B 点以上になった: {emitted[0][1]}"
+
+    def test_b_drag_clamped_at_a_point(self, slider, qtbot):
+        """B 点を A 点より左にドラッグしようとした場合、emit される ms 値が A 点 ms より大きくクランプされる。"""
+        slider.set_bookmarks([], duration_ms=10000)
+        slider.set_ab_preview(4000, 8000)
+        slider.resize(500, 30)
+        slider.show()
+        groove = slider._groove_rect()
+        if groove.width() == 0:
+            pytest.skip("ヘッドレス環境のためグルーブ幅が 0 です")
+        from PyQt6.QtCore import QPoint
+        from PyQt6.QtTest import QTest
+        emitted = []
+        slider.ab_point_drag_finished.connect(lambda t, ms: emitted.append((t, ms)))
+        xb = slider._ms_to_x(8000, groove)
+        # A 点(4000ms)より左（1000ms 相当）にドラッグ
+        x_before_a = slider._ms_to_x(1000, groove)
+        QTest.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(xb, slider.height() // 2))
+        QTest.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(x_before_a, slider.height() // 2))
+        assert len(emitted) >= 1
+        assert emitted[0][0] == "b"
+        assert emitted[0][1] > 4000, f"B 点が A 点以下になった: {emitted[0][1]}"

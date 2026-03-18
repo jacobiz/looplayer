@@ -14,13 +14,16 @@ _COLORS = [
 ]
 _CURRENT_COLOR = QColor(255, 255,   0, 180)  # 強調表示用（黄色・高不透明）
 _MIN_BAR_WIDTH = 4  # 最小クリック可能幅（px）
+_AB_LINE_COLOR = QColor(255, 255, 255, 200)  # US2: AB 点縦線（白・高不透明）
+_AB_BAR_COLOR  = QColor(255, 255, 255, 120)  # US2: AB 点バー（白・半透明）
 
 
 class BookmarkSlider(QSlider):
     """ブックマーク区間バーを重ね描きするシークスライダー（FR-001〜FR-005）。"""
 
-    bookmark_bar_clicked = pyqtSignal(str)  # クリックされたブックマークの ID
-    seek_requested = pyqtSignal(int)        # トラッククリック/ドラッグ時のシーク位置（ms）
+    bookmark_bar_clicked = pyqtSignal(str)   # クリックされたブックマークの ID
+    seek_requested = pyqtSignal(int)         # トラッククリック/ドラッグ時のシーク位置（ms）
+    ab_point_drag_finished = pyqtSignal(str, int)  # US3: "a"/"b" と確定 ms 値
 
     def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None):
         super().__init__(orientation, parent)
@@ -28,6 +31,11 @@ class BookmarkSlider(QSlider):
         self._duration_ms: int = 0
         self._current_id: str | None = None  # 連続再生中の強調対象 ID
         self._dragging: bool = False          # トラッククリック起点のドラッグ中フラグ
+        # US2: 設定中 AB 点プレビュー（保存前の一時状態）
+        self._ab_preview_a: int | None = None
+        self._ab_preview_b: int | None = None
+        # US3: AB 点ドラッグターゲット
+        self._ab_drag_target: str | None = None
 
     # ── 外部インターフェース ──────────────────────────────────
 
@@ -35,6 +43,12 @@ class BookmarkSlider(QSlider):
     def is_track_dragging(self) -> bool:
         """トラッククリック起点のドラッグ中かどうかを返す。"""
         return self._dragging
+
+    def set_ab_preview(self, a_ms: int | None, b_ms: int | None) -> None:
+        """US2: 設定中 AB 点プレビューを更新して再描画する。None = 未設定/消去。"""
+        self._ab_preview_a = a_ms
+        self._ab_preview_b = b_ms
+        self.update()
 
     def set_bookmarks(
         self,
@@ -107,7 +121,38 @@ class BookmarkSlider(QSlider):
             rect = QRect(x1, groove.top(), x2 - x1, groove.height())
             painter.fillRect(rect, color)
 
+        # US2: 設定中 AB 点プレビューを描画（保存済みブックマークバーの上に重ねる）
+        self._paint_ab_preview(painter, groove)
+
         painter.end()
+
+    def _paint_ab_preview(self, painter: QPainter, groove: QRect) -> None:
+        """US2: 設定中 AB 点プレビューを描画する。"""
+        a_ms = self._ab_preview_a
+        b_ms = self._ab_preview_b
+        if a_ms is None and b_ms is None:
+            return
+        if self._duration_ms <= 0:
+            return
+
+        if a_ms is not None and b_ms is not None:
+            # A・B 両方設定済み：半透明バー + 両端縦線
+            xa = self._ms_to_x(a_ms, groove)
+            xb = self._ms_to_x(b_ms, groove)
+            if xb > xa:
+                bar_rect = QRect(xa, groove.top(), xb - xa, groove.height())
+                painter.fillRect(bar_rect, _AB_BAR_COLOR)
+            # 両端縦線
+            painter.fillRect(QRect(xa, groove.top(), 3, groove.height()), _AB_LINE_COLOR)
+            painter.fillRect(QRect(xb - 2, groove.top(), 3, groove.height()), _AB_LINE_COLOR)
+        elif a_ms is not None:
+            # A 点のみ：縦線マーカー
+            xa = self._ms_to_x(a_ms, groove)
+            painter.fillRect(QRect(xa - 1, groove.top(), 3, groove.height()), _AB_LINE_COLOR)
+        elif b_ms is not None:
+            # B 点のみ：縦線マーカー
+            xb = self._ms_to_x(b_ms, groove)
+            painter.fillRect(QRect(xb - 1, groove.top(), 3, groove.height()), _AB_LINE_COLOR)
 
     # ── クリック判定 ──────────────────────────────────────────
 
@@ -125,10 +170,35 @@ class BookmarkSlider(QSlider):
                 result = bm.id  # 後勝ちで上書き → 最後に登録したものが選択される
         return result
 
+    def _find_ab_drag_target(self, x: int) -> str | None:
+        """US3: X 座標が AB 点マーカーの ±6px 以内かを判定し 'a'/'b'/None を返す。"""
+        if self._duration_ms <= 0:
+            return None
+        groove = self._groove_rect()
+        if groove.width() <= 0:
+            return None
+        _HIT_PX = 6
+        if self._ab_preview_a is not None:
+            xa = self._ms_to_x(self._ab_preview_a, groove)
+            if abs(x - xa) <= _HIT_PX:
+                return "a"
+        if self._ab_preview_b is not None:
+            xb = self._ms_to_x(self._ab_preview_b, groove)
+            if abs(x - xb) <= _HIT_PX:
+                return "b"
+        return None
+
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
-        """バーのクリックを検出して bookmark_bar_clicked を emit するか、トラッククリックシークを行う。"""
+        """バーのクリックを検出して bookmark_bar_clicked を emit するか、トラッククリックシークを行う。
+        US3: AB 点マーカー付近のクリックは AB ドラッグモードを開始する（最高優先度）。"""
         if event.button() == Qt.MouseButton.LeftButton:
             x = event.position().toPoint().x()
+            # US3: AB マーカードラッグ判定（ブックマーク・シークより優先）
+            ab_target = self._find_ab_drag_target(x)
+            if ab_target is not None:
+                self._ab_drag_target = ab_target
+                event.accept()
+                return
             bm_id = self._find_bookmark_at_x(x)
             if bm_id is not None:
                 self.bookmark_bar_clicked.emit(bm_id)
@@ -144,8 +214,24 @@ class BookmarkSlider(QSlider):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
-        """ドラッグ中に seek_requested をリアルタイムで emit する。"""
-        if self._dragging and event.buttons() & Qt.MouseButton.LeftButton:
+        """ドラッグ中に seek_requested をリアルタイムで emit する。
+        US3: AB ドラッグ中はプレビュー位置を更新して再描画する。"""
+        if self._ab_drag_target is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            # US3: AB 点ドラッグ中 — プレビュー位置を更新（A < B 制約を適用）
+            groove = self._groove_rect()
+            ms = self._x_to_ms(event.position().toPoint().x(), groove)
+            if self._ab_drag_target == "a":
+                if self._ab_preview_b is not None:
+                    ms = min(ms, self._ab_preview_b - 1)
+                ms = max(ms, 0)
+                self._ab_preview_a = ms
+            else:  # "b"
+                if self._ab_preview_a is not None:
+                    ms = max(ms, self._ab_preview_a + 1)
+                ms = min(ms, self._duration_ms)
+                self._ab_preview_b = ms
+            self.update()
+        elif self._dragging and event.buttons() & Qt.MouseButton.LeftButton:
             groove = self._groove_rect()
             ms = self._x_to_ms(event.position().toPoint().x(), groove)
             self.seek_requested.emit(ms)
@@ -153,7 +239,17 @@ class BookmarkSlider(QSlider):
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
-        """ドラッグ終了時に _dragging フラグをクリアする。"""
+        """ドラッグ終了時に _dragging フラグをクリアする。
+        US3: AB ドラッグ中はリリース時に ab_point_drag_finished を emit する。"""
         if event.button() == Qt.MouseButton.LeftButton:
+            if self._ab_drag_target is not None:
+                # US3: ドラッグ終了 → 確定 ms 値を emit
+                target = self._ab_drag_target
+                ms = self._ab_preview_a if target == "a" else self._ab_preview_b
+                if ms is not None:
+                    self.ab_point_drag_finished.emit(target, ms)
+                self._ab_drag_target = None
+                event.accept()
+                return
             self._dragging = False
         super().mouseReleaseEvent(event)
