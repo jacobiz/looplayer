@@ -111,3 +111,13 @@ class AppSettings:
         else:
             self._data["window_geometry"] = value
         self.save()
+
+    @property
+    def onboarding_shown(self) -> bool:
+        """オンボーディング完了/スキップ済みフラグ。未設定は False。"""
+        return bool(self._data.get("onboarding_shown", False))
+
+    @onboarding_shown.setter
+    def onboarding_shown(self, value: bool) -> None:
+        self._data["onboarding_shown"] = value
+        self.save()

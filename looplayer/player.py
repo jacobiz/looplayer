@@ -81,6 +81,13 @@ class VideoPlayer(QMainWindow):
         self._cursor_hide_timer.setInterval(3000)
         self._cursor_hide_timer.timeout.connect(self._hide_cursor)
 
+        # F-503: フルスクリーン中コントロールオーバーレイ自動非表示タイマー
+        self._overlay_hide_timer = QTimer(self)
+        self._overlay_hide_timer.setSingleShot(True)
+        self._overlay_hide_timer.setInterval(3000)
+        self._overlay_hide_timer.timeout.connect(self._hide_overlay)
+        self._in_overlay_mode: bool = False  # フルスクリーンオーバーレイモード中フラグ
+
         self.ab_point_a = None
         self.ab_point_b = None
         self.ab_loop_active = False
@@ -137,6 +144,15 @@ class VideoPlayer(QMainWindow):
         self.timer.setInterval(200)
         self.timer.timeout.connect(self._on_timer)
         self.timer.start()
+
+        # F-501: 初回起動オンボーディング
+        self._onboarding_overlay = None
+        if not self._app_settings.onboarding_shown:
+            from looplayer.widgets.onboarding_overlay import OnboardingOverlay
+            self._onboarding_overlay = OnboardingOverlay(
+                settings=self._app_settings, parent=self
+            )
+            self._onboarding_overlay.show()
 
     def _build_ui(self):
         central = QWidget()
@@ -217,10 +233,16 @@ class VideoPlayer(QMainWindow):
         self.ab_reset_btn = QPushButton("ABリセット")
         self.ab_reset_btn.clicked.connect(self.reset_ab)
         self.ab_info_label = QLabel("A: --  B: --")
+        self._zoom_btn = QPushButton(t("btn.zoom_mode"))
+        self._zoom_btn.setToolTip(t("tooltip.btn.zoom_mode"))
+        self._zoom_btn.setCheckable(True)
+        self._zoom_btn.setEnabled(False)
+        self._zoom_btn.clicked.connect(self._toggle_zoom_mode)
         ab_layout.addWidget(self.set_a_btn)
         ab_layout.addWidget(self.set_b_btn)
         ab_layout.addWidget(self.ab_toggle_btn)
         ab_layout.addWidget(self.ab_reset_btn)
+        ab_layout.addWidget(self._zoom_btn)
         ab_layout.addWidget(self.ab_info_label)
         ab_layout.addStretch()
         controls_layout.addLayout(ab_layout)
@@ -320,6 +342,13 @@ class VideoPlayer(QMainWindow):
         self._clip_export_action.setEnabled(False)
         self._clip_export_action.triggered.connect(self._export_clip)
         file_menu.addAction(self._clip_export_action)
+
+        file_menu.addSeparator()
+
+        # F-401: 設定ダイアログ
+        preferences_action = QAction(t("menu.file.preferences"), self)
+        preferences_action.triggered.connect(self._open_preferences)
+        file_menu.addAction(preferences_action)
 
         file_menu.addSeparator()
 
@@ -521,6 +550,11 @@ class VideoPlayer(QMainWindow):
         shortcut_list_action = QAction(t("menu.help.shortcuts"), self)
         shortcut_list_action.triggered.connect(self._show_shortcut_dialog)
         help_menu.addAction(shortcut_list_action)
+
+        # F-501: チュートリアル再表示
+        tutorial_action = QAction(t("menu.help.tutorial"), self)
+        tutorial_action.triggered.connect(self._show_tutorial)
+        help_menu.addAction(tutorial_action)
 
         help_menu.addSeparator()
 
@@ -849,6 +883,9 @@ class VideoPlayer(QMainWindow):
         """ユーザー手動リサイズ時にポーリングタイマーを停止する（自動リサイズ時は無視）。"""
         if not self._auto_resizing and self._size_poll_timer.isActive():
             self._size_poll_timer.stop()
+        # F-501: オンボーディングオーバーレイを中央追従させる
+        if self._onboarding_overlay is not None and not self._onboarding_overlay.isHidden():
+            self._onboarding_overlay._reposition(self)
         super().resizeEvent(event)
 
     _SUPPORTED_EXTENSIONS = {".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v"}
@@ -1105,6 +1142,22 @@ class VideoPlayer(QMainWindow):
             group.addAction(action)
             self._subtitle_menu.addAction(action)
 
+    def _open_preferences(self) -> None:
+        """F-401: 設定ダイアログを開く。"""
+        from looplayer.widgets.preferences_dialog import PreferencesDialog
+        dialog = PreferencesDialog(settings=self._app_settings, parent=self)
+        dialog.exec()
+
+    def _show_tutorial(self) -> None:
+        """F-501: チュートリアルオーバーレイを再表示する（ヘルプメニューから）。"""
+        from looplayer.widgets.onboarding_overlay import OnboardingOverlay
+        if self._onboarding_overlay is not None:
+            self._onboarding_overlay.deleteLater()
+        self._onboarding_overlay = OnboardingOverlay(
+            settings=self._app_settings, parent=self
+        )
+        self._onboarding_overlay.show()
+
     def _open_subtitle_file(self) -> None:
         """F-201: 外部字幕ファイルを開いて VLC に読み込む（FR-102〜FR-106）。"""
         if self._current_video_path is None:
@@ -1199,7 +1252,7 @@ class VideoPlayer(QMainWindow):
             # F-403: フルスクリーン突入前にジオメトリを保持する
             self._pre_fullscreen_geometry = self.geometry()
             self.showFullScreen()
-            self.controls_panel.hide()
+            self._enter_fullscreen_overlay_mode()
             self.menuBar().hide()
             self.statusBar().hide()
             self.video_frame.setMouseTracking(True)
@@ -1217,24 +1270,71 @@ class VideoPlayer(QMainWindow):
             self.unsetCursor()
             self.showNormal()
             self._pre_fullscreen_geometry = None
-            self.controls_panel.show()
+            self._exit_fullscreen_overlay_mode()
             self.menuBar().show()
             self.statusBar().show()
 
+    # ── F-503: フルスクリーンオーバーレイ ────────────────────────
+
+    def _enter_fullscreen_overlay_mode(self) -> None:
+        """controls_panel をレイアウトから外してフローティングオーバーレイに切り替える。"""
+        layout = self.centralWidget().layout()
+        layout.removeWidget(self.controls_panel)
+        self.controls_panel.setParent(self)
+        self._reposition_overlay()
+        self.controls_panel.hide()
+        self._in_overlay_mode = True
+
+    def _exit_fullscreen_overlay_mode(self) -> None:
+        """controls_panel をレイアウトに戻して通常表示に復元する。"""
+        self._overlay_hide_timer.stop()
+        self._in_overlay_mode = False
+        layout = self.centralWidget().layout()
+        layout.addWidget(self.controls_panel)
+        self.controls_panel.show()
+
+    def _reposition_overlay(self) -> None:
+        """controls_panel のオーバーレイ位置（画面下端）を計算してセットする。"""
+        w = self.width()
+        h = self.height()
+        overlay_h = self.controls_panel.sizeHint().height() or 80
+        self.controls_panel.setGeometry(0, h - overlay_h, w, overlay_h)
+        self.controls_panel.raise_()
+
+    def _show_overlay(self) -> None:
+        """コントロールオーバーレイを表示してタイマーをリセットする。"""
+        self._reposition_overlay()
+        self.controls_panel.show()
+        self.unsetCursor()
+        self._overlay_hide_timer.start(3000)
+        self._cursor_hide_timer.start(3000)
+
+    def _hide_overlay(self) -> None:
+        """コントロールオーバーレイを非表示にする（タイマーコールバック）。"""
+        self.controls_panel.hide()
+
     def _hide_cursor(self) -> None:
-        """US4: フルスクリーン中のみカーソルを非表示にする。"""
+        """US4: フルスクリーン中のみカーソルを非表示にする。
+        F-503: オーバーレイモード中は controls_panel が表示されているときは非表示にしない。"""
         if self.isFullScreen():
+            # オーバーレイモード中でコントロールが表示中はカーソルを隠さない
+            if self._in_overlay_mode and not self.controls_panel.isHidden():
+                return
             self.setCursor(Qt.CursorShape.BlankCursor)
 
     def mouseMoveEvent(self, event):
-        """FR-016: フルスクリーン中のマウス追跡でメニューバーを自動表示。US4: カーソルを復元。"""
+        """FR-016: フルスクリーン中のマウス追跡でメニューバーを自動表示。US4: カーソルを復元。F-503: overlay 表示。"""
         if self.isFullScreen():
             if event.pos().y() < 15:
                 self.menuBar().show()
                 self._menu_hide_timer.start(2000)
-            # US4: マウス移動でカーソル復元・タイマーリセット
-            self.unsetCursor()
-            self._cursor_hide_timer.start()
+            # F-503: 画面下端10%でコントロールオーバーレイを表示
+            if event.pos().y() > self.height() * 0.9:
+                self._show_overlay()
+            else:
+                # US4: マウス移動でカーソル復元・タイマーリセット
+                self.unsetCursor()
+                self._cursor_hide_timer.start()
         super().mouseMoveEvent(event)
 
     # ── 常に最前面操作 ────────────────────────────────────────
@@ -1294,6 +1394,9 @@ class VideoPlayer(QMainWindow):
         self._update_ab_info()
         self._update_save_btn_state()
         self.seek_slider.set_ab_preview(None, None)  # US2
+        # F-105: AB リセット時はズームも解除
+        self._zoom_btn.setChecked(False)
+        self.seek_slider.clear_zoom()
 
     def _on_ab_drag_finished(self, target: str, ms: int) -> None:
         """US3: AB 点マーカーのドラッグ完了時に呼ばれ、AB 点を更新する。"""
@@ -1318,10 +1421,42 @@ class VideoPlayer(QMainWindow):
         self.ab_info_label.setText(f"A: {a_str}  B: {b_str}")
 
     def _update_save_btn_state(self):
-        """FR-001: A・B点が両方設定済み時のみ保存ボタンを有効化。"""
+        """FR-001: A・B点が両方設定済み時のみ保存ボタンとズームボタンを有効化。"""
         enabled = self.ab_point_a is not None and self.ab_point_b is not None
         self.save_bookmark_btn.setEnabled(enabled)
+        self._zoom_btn.setEnabled(enabled)
+        if not enabled and self.seek_slider.zoom_enabled:
+            # AB 点が消えた場合はズームも解除
+            self._zoom_btn.setChecked(False)
+            self.seek_slider.clear_zoom()
+        elif enabled and self.seek_slider.zoom_enabled:
+            # AB 点変化中でズームが有効なら範囲を自動更新
+            self._apply_zoom_range()
         self._update_clip_export_action_state()
+
+    def _toggle_zoom_mode(self, checked: bool | None = None) -> None:
+        """F-105: ズームモードをトグルする。"""
+        if checked is None:
+            checked = self._zoom_btn.isChecked()
+        if checked:
+            self._apply_zoom_range()
+        else:
+            self.seek_slider.clear_zoom()
+
+    def _apply_zoom_range(self) -> None:
+        """F-105: AB 区間に ±10% パディングを加えてズーム範囲を設定する。"""
+        if self.ab_point_a is None or self.ab_point_b is None:
+            return
+        ab_range = self.ab_point_b - self.ab_point_a
+        padding = int(ab_range * 0.1)
+        duration = self.media_player.get_length()
+        start_ms = max(0, self.ab_point_a - padding)
+        end_ms = self.ab_point_b + padding
+        if duration > 0:
+            end_ms = min(end_ms, duration)
+        if end_ms <= start_ms:
+            end_ms = start_ms + 1
+        self.seek_slider.set_zoom(start_ms, end_ms)
 
     def _update_clip_export_action_state(self) -> None:
         """AB ループの状態に応じてクリップ書き出しアクションの有効/無効を更新する。"""

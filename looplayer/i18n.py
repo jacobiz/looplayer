@@ -177,6 +177,42 @@ _STRINGS: dict[str, dict[str, str]] = {
     "tooltip.btn.edit_tags":            {"ja": "タグを編集",                      "en": "Edit tags"},
     "tooltip.btn.reset_play_count":     {"ja": "再生回数をリセット",               "en": "Reset play count"},
     "tooltip.pause_interval":           {"ja": "ループ間の一時停止時間（秒）",     "en": "Pause duration between loops (seconds)"},
+    # ── 017-p2-ux-features ─────────────────────────────────────────────────────
+    # F-401: 設定画面
+    "menu.file.preferences":            {"ja": "設定...",                          "en": "Preferences..."},
+    "dialog.prefs.title":               {"ja": "設定",                             "en": "Preferences"},
+    "dialog.prefs.tab.playback":        {"ja": "再生",                             "en": "Playback"},
+    "dialog.prefs.tab.view":            {"ja": "表示",                             "en": "View"},
+    "dialog.prefs.tab.updates":         {"ja": "アップデート",                     "en": "Updates"},
+    "dialog.prefs.end_action.label":    {"ja": "再生終了時の動作",                 "en": "End of playback"},
+    "dialog.prefs.end_action.stop":     {"ja": "停止",                             "en": "Stop"},
+    "dialog.prefs.end_action.rewind":   {"ja": "先頭に戻る",                       "en": "Rewind"},
+    "dialog.prefs.end_action.loop":     {"ja": "ループ",                           "en": "Loop"},
+    "dialog.prefs.seq_mode.label":      {"ja": "連続再生モード",                   "en": "Sequential play"},
+    "dialog.prefs.encode_mode.label":   {"ja": "エクスポートエンコードモード",     "en": "Export encode mode"},
+    "dialog.prefs.always_on_top.label": {"ja": "常に最前面に表示（メニューで変更）", "en": "Always on top (change via menu)"},
+    "dialog.prefs.check_update.label":  {"ja": "起動時に更新を確認する",           "en": "Check for updates on startup"},
+    # F-501: 初回起動オンボーディング
+    "menu.help.tutorial":               {"ja": "チュートリアルを表示",             "en": "Show Tutorial"},
+    "onboarding.step0.title":           {"ja": "ようこそ！looplay! へ",            "en": "Welcome to looplay!"},
+    "onboarding.step0.body":            {"ja": "AB ループ練習ツールへようこそ。まず動画ファイルを開きましょう。「ファイル > ファイルを開く」またはウィンドウにドラッグ＆ドロップで動画を読み込めます。",
+                                         "en": "Welcome to looplay! Start by opening a video file. Use \"File > Open File\" or drag and drop a video onto the window."},
+    "onboarding.step1.title":           {"ja": "A/B 点を設定する",                 "en": "Set A/B Points"},
+    "onboarding.step1.body":            {"ja": "動画を再生しながら「A点」ボタンでループ開始点、「B点」ボタンでループ終了点を設定します。シークバーで任意の位置に移動してから設定するとより正確です。",
+                                         "en": "While the video plays, press \"Set A\" to mark the loop start, and \"Set B\" for the loop end. Seek to the exact position first for precise results."},
+    "onboarding.step2.title":           {"ja": "AB ループを再生する",               "en": "Play the AB Loop"},
+    "onboarding.step2.body":            {"ja": "「AB ループ: OFF」ボタンを押すとループ再生が開始されます。A 点と B 点の間を繰り返し再生します。",
+                                         "en": "Press the \"AB Loop: OFF\" button to start loop playback. The video will repeat between your A and B points."},
+    "onboarding.step3.title":           {"ja": "ブックマークに保存する",            "en": "Save as Bookmark"},
+    "onboarding.step3.body":            {"ja": "「ブックマーク保存」でこの区間を名前を付けて保存できます。保存した区間は左パネルのリストに表示され、いつでも呼び出せます。",
+                                         "en": "Click \"Save Bookmark\" to save this loop section with a name. Saved bookmarks appear in the left panel and can be recalled anytime."},
+    "onboarding.btn.next":              {"ja": "次へ",                             "en": "Next"},
+    "onboarding.btn.finish":            {"ja": "完了",                             "en": "Finish"},
+    "onboarding.btn.skip":              {"ja": "スキップ",                         "en": "Skip"},
+    "onboarding.progress":              {"ja": "{step} / {total}",                 "en": "{step} / {total}"},
+    # F-105: ABループ区間のズーム表示
+    "btn.zoom_mode":                    {"ja": "ズーム",                           "en": "Zoom"},
+    "tooltip.btn.zoom_mode":            {"ja": "AB区間をシークバー全幅に拡大表示 (Z)", "en": "Zoom to AB section (Z)"},
 }
 
 # ── 公開 API ────────────────────────────────────────────────
