@@ -36,6 +36,33 @@ class BookmarkSlider(QSlider):
         self._ab_preview_b: int | None = None
         # US3: AB 点ドラッグターゲット
         self._ab_drag_target: str | None = None
+        # F-105: ズームモード
+        self._zoom_enabled: bool = False
+        self._zoom_start_ms: int = 0
+        self._zoom_end_ms: int = 0
+
+    # ── ズームモード ──────────────────────────────────────────
+
+    @property
+    def zoom_enabled(self) -> bool:
+        """ズームモードが有効かどうかを返す。"""
+        return self._zoom_enabled
+
+    def set_zoom(self, start_ms: int, end_ms: int) -> None:
+        """ズームモードを有効化して表示範囲を設定する。start_ms < end_ms が必要。"""
+        if start_ms >= end_ms:
+            raise ValueError(f"start_ms ({start_ms}) must be less than end_ms ({end_ms})")
+        self._zoom_start_ms = start_ms
+        self._zoom_end_ms = end_ms
+        self._zoom_enabled = True
+        self.update()
+
+    def clear_zoom(self) -> None:
+        """ズームモードを無効化して通常表示に戻す。"""
+        self._zoom_enabled = False
+        self._zoom_start_ms = 0
+        self._zoom_end_ms = 0
+        self.update()
 
     # ── 外部インターフェース ──────────────────────────────────
 
@@ -76,7 +103,14 @@ class BookmarkSlider(QSlider):
         )
 
     def _ms_to_x(self, ms: int, groove: QRect, duration_ms: int | None = None) -> int:
-        """ミリ秒をグルーブ内 X 座標に変換する（動画長外はクリップ）。"""
+        """ミリ秒をグルーブ内 X 座標に変換する（動画長外はクリップ）。
+        ズームモード有効時は zoom_start_ms〜zoom_end_ms がグルーブ全幅にマップされる。"""
+        if self._zoom_enabled and duration_ms is None:
+            zoom_range = self._zoom_end_ms - self._zoom_start_ms
+            if zoom_range <= 0:
+                return groove.left()
+            ratio = max(0.0, min(1.0, (ms - self._zoom_start_ms) / zoom_range))
+            return groove.left() + int(ratio * groove.width())
         dur = duration_ms if duration_ms is not None else self._duration_ms
         if dur <= 0:
             return groove.left()
@@ -84,10 +118,14 @@ class BookmarkSlider(QSlider):
         return groove.left() + int(ratio * groove.width())
 
     def _x_to_ms(self, x: int, groove: QRect) -> int:
-        """グルーブ内 X 座標をミリ秒に変換する（[0, _duration_ms] にクリップ）。"""
+        """グルーブ内 X 座標をミリ秒に変換する（[0, _duration_ms] にクリップ）。
+        ズームモード有効時は zoom_start_ms〜zoom_end_ms の範囲に変換する。"""
         if groove.width() <= 0:
             return 0
         ratio = max(0.0, min(1.0, (x - groove.left()) / groove.width()))
+        if self._zoom_enabled:
+            zoom_range = self._zoom_end_ms - self._zoom_start_ms
+            return int(self._zoom_start_ms + ratio * zoom_range)
         return int(ratio * self._duration_ms)
 
     def _bar_x_range(
@@ -115,6 +153,10 @@ class BookmarkSlider(QSlider):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
         for i, bm in enumerate(self._bookmarks):
+            # ズームモード中はズーム範囲と重なるブックマークのみ描画する
+            if self._zoom_enabled:
+                if bm.point_b_ms < self._zoom_start_ms or bm.point_a_ms > self._zoom_end_ms:
+                    continue
             is_current = (bm.id == self._current_id)
             color = _CURRENT_COLOR if is_current else _COLORS[i % len(_COLORS)]
             x1, x2 = self._bar_x_range(bm.point_a_ms, bm.point_b_ms, groove)
