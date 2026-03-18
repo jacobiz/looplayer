@@ -141,10 +141,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER=${{ steps.version.outputs.VERSION }}
-          gh release create ${{ github.ref_name }} \
-            "dist/looplay-Setup-$VER.exe#looplay! インストーラ (Windows)" \
-            "dist/looplay-$VER.dmg#looplay! ディスクイメージ (macOS)" \
-            "dist/SHA256SUMS.txt#SHA256 チェックサム" \
-            --title "looplay! ${{ github.ref_name }}" \
-            --generate-notes \
-            --repo ${{ github.repository }}
+          TAG=${{ github.ref_name }}
+          REPO=${{ github.repository }}
+
+          # リリースが既に存在する場合はアセットを追加、存在しない場合は新規作成
+          if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
+            echo "リリース $TAG は既に存在します。アセットをアップロードします。"
+            gh release upload "$TAG" \
+              "dist/looplay-Setup-$VER.exe#looplay! インストーラ (Windows)" \
+              "dist/looplay-$VER.dmg#looplay! ディスクイメージ (macOS)" \
+              "dist/SHA256SUMS.txt#SHA256 チェックサム" \
+              --repo "$REPO" \
+              --clobber
+          else
+            gh release create "$TAG" \
+              "dist/looplay-Setup-$VER.exe#looplay! インストーラ (Windows)" \
+              "dist/looplay-$VER.dmg#looplay! ディスクイメージ (macOS)" \
+              "dist/SHA256SUMS.txt#SHA256 チェックサム" \
+              --title "looplay! $TAG" \
+              --generate-notes \
+              --repo "$REPO"
+          fi
