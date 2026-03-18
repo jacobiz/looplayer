@@ -87,3 +87,57 @@ class TestAppSettingsAtomicWrite:
             s.end_of_playback_action = "stop"
             tmp = path.with_suffix(".json.tmp")
             assert not tmp.exists()
+
+
+# ── 016-p1-features: F-403 window_geometry テスト ────────────────────────────
+
+
+class TestWindowGeometry:
+    def test_default_returns_none(self, tmp_path):
+        """キーが存在しない場合 None を返す。"""
+        with patch("looplayer.app_settings._SETTINGS_PATH", tmp_path / "settings.json"):
+            from looplayer.app_settings import AppSettings
+            s = AppSettings()
+            assert s.window_geometry is None
+
+    def test_set_and_get_valid_geometry(self, tmp_path):
+        """有効な dict をセットして同値が返る。"""
+        path = tmp_path / "settings.json"
+        with patch("looplayer.app_settings._SETTINGS_PATH", path):
+            from looplayer.app_settings import AppSettings
+            s = AppSettings()
+            geo = {"x": 100, "y": 200, "width": 1280, "height": 720}
+            s.window_geometry = geo
+            assert s.window_geometry == geo
+
+    def test_geometry_survives_reload(self, tmp_path):
+        """保存→リロードで同値が返る。"""
+        path = tmp_path / "settings.json"
+        with patch("looplayer.app_settings._SETTINGS_PATH", path):
+            from looplayer.app_settings import AppSettings
+            s1 = AppSettings()
+            s1.window_geometry = {"x": 50, "y": 60, "width": 800, "height": 600}
+
+            s2 = AppSettings()
+            assert s2.window_geometry == {"x": 50, "y": 60, "width": 800, "height": 600}
+
+    def test_set_none_removes_key(self, tmp_path):
+        """None をセットするとキーが削除される。"""
+        path = tmp_path / "settings.json"
+        with patch("looplayer.app_settings._SETTINGS_PATH", path):
+            from looplayer.app_settings import AppSettings
+            s = AppSettings()
+            s.window_geometry = {"x": 0, "y": 0, "width": 800, "height": 600}
+            s.window_geometry = None
+            assert s.window_geometry is None
+            data = json.loads(path.read_text())
+            assert "window_geometry" not in data
+
+    def test_missing_field_returns_none(self, tmp_path):
+        """必須フィールド欠損の dict は None を返す。"""
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"window_geometry": {"x": 0, "y": 0}}))
+        with patch("looplayer.app_settings._SETTINGS_PATH", path):
+            from looplayer.app_settings import AppSettings
+            s = AppSettings()
+            assert s.window_geometry is None

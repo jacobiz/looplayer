@@ -93,3 +93,21 @@ class AppSettings:
     def update_check_etag(self, value: str) -> None:
         self._data["update_check_etag"] = value
         self.save()
+
+    @property
+    def window_geometry(self) -> dict | None:
+        """ウィンドウ位置・サイズ（x, y, width, height）。未設定は None。"""
+        geo = self._data.get("window_geometry")
+        if geo is None:
+            return None
+        if not all(k in geo for k in ("x", "y", "width", "height")):
+            return None
+        return geo
+
+    @window_geometry.setter
+    def window_geometry(self, value: dict | None) -> None:
+        if value is None:
+            self._data.pop("window_geometry", None)
+        else:
+            self._data["window_geometry"] = value
+        self.save()

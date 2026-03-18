@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSlider, QLabel, QFileDialog, QMessageBox,
 )
 from PyQt6.QtGui import QAction, QActionGroup, QKeySequence, QDragEnterEvent, QDropEvent
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QPoint, pyqtSignal
 
 import shutil
 import subprocess
@@ -56,6 +56,7 @@ class VideoPlayer(QMainWindow):
         self.instance = vlc.Instance()
         self.media_player = self.instance.media_player_new()
         self._current_video_path: str | None = None
+        self._external_subtitle_path: Path | None = None
 
         # FR-015: ファイルが開けない場合のエラーイベント購読
         self._error_occurred.connect(self._show_error_dialog)
@@ -101,6 +102,9 @@ class VideoPlayer(QMainWindow):
         # 常に最前面フラグ
         self._always_on_top: bool = False
 
+        # F-403: フルスクリーン前のウィンドウジオメトリ
+        self._pre_fullscreen_geometry = None
+
         # US4: アプリ設定（再生終了動作など）
         from looplayer.app_settings import AppSettings
         self._app_settings = AppSettings()
@@ -120,6 +124,7 @@ class VideoPlayer(QMainWindow):
 
         self._build_ui()
         self._build_menus()
+        self._restore_window_geometry()
 
         # 010: 起動時更新確認（バックグラウンド）
         if self._app_settings.check_update_on_startup:
@@ -157,6 +162,7 @@ class VideoPlayer(QMainWindow):
         volume_bar = QHBoxLayout()
         self.volume_label = QLabel("80%")
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider.setToolTip(t("tooltip.volume"))
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(80)
         self.volume_slider.setFixedWidth(120)
@@ -171,6 +177,7 @@ class VideoPlayer(QMainWindow):
         seek_layout = QHBoxLayout()
         self.time_label = QLabel("00:00 / 00:00")
         self.seek_slider = BookmarkSlider(Qt.Orientation.Horizontal)
+        self.seek_slider.setToolTip(t("tooltip.seekbar"))
         self.seek_slider.setRange(0, 1000)
         self.seek_slider.sliderMoved.connect(self._on_seek)
         self.seek_slider.bookmark_bar_clicked.connect(self._on_bookmark_bar_clicked)
@@ -185,6 +192,7 @@ class VideoPlayer(QMainWindow):
         self.open_btn = QPushButton("開く")
         self.open_btn.clicked.connect(self.open_file)
         self.play_btn = QPushButton(t("btn.play"))
+        self.play_btn.setToolTip(t("tooltip.btn.play"))
         self.play_btn.clicked.connect(self.toggle_play)
         self.stop_btn = QPushButton("停止")
         self.stop_btn.clicked.connect(self.stop)
@@ -197,10 +205,13 @@ class VideoPlayer(QMainWindow):
         # AB loop controls
         ab_layout = QHBoxLayout()
         self.set_a_btn = QPushButton("A点セット")
+        self.set_a_btn.setToolTip(t("tooltip.btn.set_a"))
         self.set_a_btn.clicked.connect(self.set_point_a)
         self.set_b_btn = QPushButton("B点セット")
+        self.set_b_btn.setToolTip(t("tooltip.btn.set_b"))
         self.set_b_btn.clicked.connect(self.set_point_b)
         self.ab_toggle_btn = QPushButton(t("btn.ab_loop_off"))
+        self.ab_toggle_btn.setToolTip(t("tooltip.btn.ab_loop"))
         self.ab_toggle_btn.setCheckable(True)
         self.ab_toggle_btn.clicked.connect(self.toggle_ab_loop)
         self.ab_reset_btn = QPushButton("ABリセット")
@@ -425,6 +436,12 @@ class VideoPlayer(QMainWindow):
 
         view_menu.addSeparator()
 
+        reset_window_action = QAction(t("menu.view.reset_window"), self)
+        reset_window_action.triggered.connect(self._reset_window_geometry)
+        view_menu.addAction(reset_window_action)
+
+        view_menu.addSeparator()
+
         self.always_on_top_action = QAction(t("menu.view.always_on_top"), self)
         self.always_on_top_action.setCheckable(True)
         self.always_on_top_action.setChecked(False)
@@ -562,6 +579,7 @@ class VideoPlayer(QMainWindow):
 
         path = os.path.normpath(path)
         self._current_video_path = path
+        self._external_subtitle_path = None
         media = self.instance.media_new(path)
         self.media_player.set_media(media)
 
@@ -1062,8 +1080,13 @@ class VideoPlayer(QMainWindow):
         self._audio_track_menu.setEnabled(len(descs) > 1)
 
     def _rebuild_subtitle_menu(self):
-        """US2: 字幕メニューをリアルタイム再構築する（T011）。"""
+        """US2 / F-201: 字幕メニューをリアルタイム再構築する。"""
         self._subtitle_menu.clear()
+        # F-201: 「字幕ファイルを開く」は常に先頭に表示する
+        open_action = QAction(t("menu.playback.subtitle.open_file"), self)
+        open_action.triggered.connect(self._open_subtitle_file)
+        self._subtitle_menu.addAction(open_action)
+        self._subtitle_menu.addSeparator()
         descs = self.media_player.video_get_spu_description() or []
         group = QActionGroup(self)
         group.setExclusive(True)
@@ -1081,7 +1104,46 @@ class VideoPlayer(QMainWindow):
             action.triggered.connect(lambda _, tid=track_id: self.media_player.video_set_spu(tid))
             group.addAction(action)
             self._subtitle_menu.addAction(action)
-        self._subtitle_menu.setEnabled(bool(descs))
+
+    def _open_subtitle_file(self) -> None:
+        """F-201: 外部字幕ファイルを開いて VLC に読み込む（FR-102〜FR-106）。"""
+        if self._current_video_path is None:
+            QMessageBox.warning(
+                self,
+                t("msg.subtitle_no_video.title"),
+                t("msg.subtitle_no_video.body"),
+            )
+            return
+
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            t("menu.playback.subtitle.open_file"),
+            "",
+            "字幕ファイル (*.srt *.ass *.ssa *.vtt);;すべてのファイル (*)",
+        )
+        if not path_str:
+            return
+
+        sub_path = Path(path_str)
+        if sub_path.suffix.lower() not in (".srt", ".ass", ".ssa", ".vtt"):
+            QMessageBox.warning(
+                self,
+                t("msg.subtitle_bad_format.title"),
+                t("msg.subtitle_bad_format.body").format(ext=sub_path.suffix),
+            )
+            return
+
+        uri = sub_path.as_uri()
+        ok = self.media_player.add_slave(vlc.MediaSlaveType.subtitle, uri, True)
+        if not ok:
+            QMessageBox.warning(
+                self,
+                t("msg.subtitle_load_error.title"),
+                t("msg.subtitle_load_error.body").format(path=str(sub_path)),
+            )
+            return
+
+        self._external_subtitle_path = sub_path
 
     def _take_screenshot(self):
         """US3: 現在フレームをデスクトップに PNG 保存する（T013）。"""
@@ -1134,6 +1196,8 @@ class VideoPlayer(QMainWindow):
         if self.isFullScreen():
             self._exit_fullscreen()
         else:
+            # F-403: フルスクリーン突入前にジオメトリを保持する
+            self._pre_fullscreen_geometry = self.geometry()
             self.showFullScreen()
             self.controls_panel.hide()
             self.menuBar().hide()
@@ -1152,6 +1216,7 @@ class VideoPlayer(QMainWindow):
             self._cursor_hide_timer.stop()
             self.unsetCursor()
             self.showNormal()
+            self._pre_fullscreen_geometry = None
             self.controls_panel.show()
             self.menuBar().show()
             self.statusBar().show()
@@ -1641,14 +1706,41 @@ class VideoPlayer(QMainWindow):
         # "stop" は VLC が自動的に停止するため何もしない
 
     def closeEvent(self, event):
-        """US5: アプリ終了時に現在の再生位置を保存する。"""
+        """US5: アプリ終了時に現在の再生位置を保存する。F-403: ウィンドウジオメトリを保存する。"""
         if self._current_video_path:
             self._playback_position.save(
                 self._current_video_path,
                 self.media_player.get_time(),
                 self.media_player.get_length(),
             )
+        # F-403: フルスクリーン中はフルスクリーン前のジオメトリを保存する
+        if self.isFullScreen() and self._pre_fullscreen_geometry is not None:
+            geo = self._pre_fullscreen_geometry
+        else:
+            geo = self.geometry()
+        self._app_settings.window_geometry = {
+            "x": geo.x(), "y": geo.y(),
+            "width": geo.width(), "height": geo.height(),
+        }
         super().closeEvent(event)
+
+    def _restore_window_geometry(self) -> None:
+        """F-403: 保存済みウィンドウジオメトリを復元する。"""
+        geo = self._app_settings.window_geometry
+        if geo is None:
+            return
+        x, y = geo["x"], geo["y"]
+        w = max(800, geo["width"])
+        h = max(600, geo["height"])
+        if QApplication.screenAt(QPoint(x, y)) is None:
+            screen = QApplication.primaryScreen().geometry()
+            x = (screen.width() - w) // 2
+            y = (screen.height() - h) // 2
+        self.setGeometry(x, y, w, h)
+
+    def _reset_window_geometry(self) -> None:
+        """F-403: ウィンドウ位置をリセットして次回起動時にデフォルト位置で開く。"""
+        self._app_settings.window_geometry = None
 
     # ── 自動更新 ──────────────────────────────────────────────
 
