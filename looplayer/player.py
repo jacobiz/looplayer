@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QSlider, QLabel, QFileDialog, QMessageBox,
 )
-from PyQt6.QtGui import QAction, QActionGroup, QKeySequence, QDragEnterEvent, QDropEvent
+from PyQt6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QDragEnterEvent, QDropEvent
 from PyQt6.QtCore import Qt, QTimer, QPoint, pyqtSignal
 
 import shutil
@@ -53,6 +53,9 @@ class VideoPlayer(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} {VERSION}")
         self.setMinimumSize(800, 600)
+        _icon_path = Path(__file__).parent.parent / "assets" / "icon.png"
+        if _icon_path.exists():
+            self.setWindowIcon(QIcon(str(_icon_path)))
 
         self.instance = vlc.Instance()
         self.media_player = self.instance.media_player_new()
