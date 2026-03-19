@@ -1,4 +1,5 @@
 """VideoPlayer メインウィンドウと起動関数。"""
+import bisect
 import os
 import sys
 import vlc
@@ -37,7 +38,7 @@ from PyQt6.QtWidgets import QDialog, QGridLayout, QDialogButtonBox, QScrollArea,
 from PyQt6.QtGui import QShortcut
 
 
-_PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+_PLAYBACK_RATES = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]
 
 
 class VideoPlayer(QMainWindow):
@@ -393,12 +394,13 @@ class VideoPlayer(QMainWindow):
 
         play_menu.addSeparator()
 
-        # 再生速度サブメニュー
+        # 再生速度サブメニュー（F-101: _PLAYBACK_RATES 10段階）
         speed_menu = play_menu.addMenu(t("menu.playback.speed"))
         self.speed_action_group = QActionGroup(self)
         self.speed_action_group.setExclusive(True)
-        for rate, label in [(0.5, "0.5倍"), (0.75, "0.75倍"), (1.0, "標準 (1.0倍)"),
-                            (1.25, "1.25倍"), (1.5, "1.5倍"), (2.0, "2.0倍")]:
+        for rate in _PLAYBACK_RATES:
+            label = (t("menu.playback.speed.standard").format(rate=rate) if rate == 1.0
+                     else t("menu.playback.speed.rate").format(rate=rate))
             action = QAction(label, self)
             action.setCheckable(True)
             action.setChecked(rate == 1.0)
@@ -478,6 +480,13 @@ class VideoPlayer(QMainWindow):
         self.always_on_top_action.triggered.connect(self._toggle_always_on_top)
         view_menu.addAction(self.always_on_top_action)
 
+        # F-203: 左右反転（ミラー表示）
+        self.mirror_action = QAction(t("menu.view.mirror_display"), self)
+        self.mirror_action.setCheckable(True)
+        self.mirror_action.setChecked(self._app_settings.mirror_display)
+        self.mirror_action.triggered.connect(self._toggle_mirror_display)
+        view_menu.addAction(self.mirror_action)
+
         # US5: ブックマーク削除 Undo (Ctrl+Z)
         undo_action = QAction("元に戻す", self)
         undo_action.setShortcut(QKeySequence("Ctrl+Z"))
@@ -519,6 +528,13 @@ class VideoPlayer(QMainWindow):
         speed_down_shortcut = QShortcut(QKeySequence("["), self)
         speed_down_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
         speed_down_shortcut.activated.connect(self._speed_down)
+        # F-101: 速度微調整ショートカット（0.05x 刻み）
+        speed_fine_up_sc = QShortcut(QKeySequence("Shift+]"), self)
+        speed_fine_up_sc.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        speed_fine_up_sc.activated.connect(self._speed_fine_up)
+        speed_fine_down_sc = QShortcut(QKeySequence("Shift+["), self)
+        speed_fine_down_sc.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        speed_fine_down_sc.activated.connect(self._speed_fine_down)
 
         # US1: フレームコマ送り
         frame_fwd_shortcut = QShortcut(QKeySequence("."), self)
@@ -615,6 +631,10 @@ class VideoPlayer(QMainWindow):
         self._current_video_path = path
         self._external_subtitle_path = None
         media = self.instance.media_new(path)
+        # F-203: ミラー表示が有効な場合、VLC の hflip フィルタを適用する
+        if self._app_settings.mirror_display:
+            media.add_option(':video-filter=transform')
+            media.add_option(':transform-type=hflip')
         self.media_player.set_media(media)
 
         win_id = int(self.video_frame.winId())
@@ -1212,20 +1232,38 @@ class VideoPlayer(QMainWindow):
         self.statusBar().showMessage(t("status.screenshot_saved").format(path=path), 3000)
 
     def _speed_up(self):
-        """再生速度を1段階上げる（US1）。"""
-        idx = _PLAYBACK_RATES.index(self._playback_rate) if self._playback_rate in _PLAYBACK_RATES else -1
-        if idx < len(_PLAYBACK_RATES) - 1:
-            self._set_playback_rate(_PLAYBACK_RATES[idx + 1])
+        """再生速度を1段階上げる（US1）。微調整後の中間値でも次の固定段階へ進む。"""
+        idx = bisect.bisect_right(_PLAYBACK_RATES, self._playback_rate)
+        if idx < len(_PLAYBACK_RATES):
+            self._set_playback_rate(_PLAYBACK_RATES[idx])
         else:
             self.statusBar().showMessage(t("status.max_speed"), 2000)
 
     def _speed_down(self):
-        """再生速度を1段階下げる（US1）。"""
-        idx = _PLAYBACK_RATES.index(self._playback_rate) if self._playback_rate in _PLAYBACK_RATES else len(_PLAYBACK_RATES)
+        """再生速度を1段階下げる（US1）。微調整後の中間値でも前の固定段階へ戻る。"""
+        idx = bisect.bisect_left(_PLAYBACK_RATES, self._playback_rate)
         if idx > 0:
             self._set_playback_rate(_PLAYBACK_RATES[idx - 1])
         else:
             self.statusBar().showMessage(t("status.min_speed"), 2000)
+
+    def _speed_fine_up(self):
+        """再生速度を 0.05x 単位で上げる（F-101）。上限 3.0x でクリップ。"""
+        new_rate = min(3.0, round(self._playback_rate + 0.05, 2))
+        self._set_playback_rate(new_rate)
+        if new_rate >= 3.0:
+            self.statusBar().showMessage(t("status.max_speed"), 2000)
+        else:
+            self.statusBar().showMessage(t("status.speed_fine_up"), 2000)
+
+    def _speed_fine_down(self):
+        """再生速度を 0.05x 単位で下げる（F-101）。下限 0.25x でクリップ。"""
+        new_rate = max(0.25, round(self._playback_rate - 0.05, 2))
+        self._set_playback_rate(new_rate)
+        if new_rate <= 0.25:
+            self.statusBar().showMessage(t("status.min_speed"), 2000)
+        else:
+            self.statusBar().showMessage(t("status.speed_fine_down"), 2000)
 
     def _frame_forward(self):
         """1フレーム進める（US1）。再生中は自動一時停止する。"""
@@ -1338,6 +1376,21 @@ class VideoPlayer(QMainWindow):
         super().mouseMoveEvent(event)
 
     # ── 常に最前面操作 ────────────────────────────────────────
+
+    def _toggle_mirror_display(self):
+        """左右反転表示をトグルする（F-203）。再生中なら現在位置と速度を保持してメディアを再生成する。"""
+        new_val = not self._app_settings.mirror_display
+        self._app_settings.mirror_display = new_val
+        self.mirror_action.setChecked(new_val)
+        if self._current_video_path is not None:
+            pos = self.media_player.get_time()
+            rate = self._playback_rate
+            self._open_path(self._current_video_path)
+            # VLC がデコードを開始するまで set_time/set_rate が無効なため遅延実行する
+            QTimer.singleShot(300, lambda: (
+                self.media_player.set_time(pos),
+                self._set_playback_rate(rate),
+            ))
 
     def _toggle_always_on_top(self):
         """常に最前面フラグをトグルする。"""

@@ -56,14 +56,14 @@ class TestSpeedUpDown:
         assert player._playback_rate == 0.75
 
     def test_speed_up_at_max_stays_at_max(self, player):
-        player._set_playback_rate(2.0)
+        player._set_playback_rate(3.0)
         player._speed_up()
-        assert player._playback_rate == 2.0
+        assert player._playback_rate == 3.0
 
     def test_speed_down_at_min_stays_at_min(self, player):
-        player._set_playback_rate(0.5)
+        player._set_playback_rate(0.25)
         player._speed_down()
-        assert player._playback_rate == 0.5
+        assert player._playback_rate == 0.25
 
     def test_speed_up_traverses_all_rates(self, player):
         from looplayer.player import _PLAYBACK_RATES

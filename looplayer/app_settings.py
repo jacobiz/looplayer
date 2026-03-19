@@ -121,3 +121,15 @@ class AppSettings:
     def onboarding_shown(self, value: bool) -> None:
         self._data["onboarding_shown"] = value
         self.save()
+
+    @property
+    def mirror_display(self) -> bool:
+        """左右反転表示の永続化状態（F-203）。デフォルト False。"""
+        return bool(self._data.get("mirror_display", False))
+
+    @mirror_display.setter
+    def mirror_display(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError(f"mirror_display は bool でなければなりません。受け取った型: {type(value).__name__!r}")
+        self._data["mirror_display"] = value
+        self.save()
