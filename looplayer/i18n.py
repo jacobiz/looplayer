@@ -227,6 +227,36 @@ _STRINGS: dict[str, dict[str, str]] = {
     # F-105: ABループ区間のズーム表示
     "btn.zoom_mode":                    {"ja": "ズーム",                           "en": "Zoom"},
     "tooltip.btn.zoom_mode":            {"ja": "AB区間をシークバー全幅に拡大表示 (Z)", "en": "Zoom to AB section (Z)"},
+    # ── 019-subtitle-bookmark-backup ────────────────────────────────────────────
+    # F-202: 字幕からブックマーク自動生成
+    "menu.playback.subtitle.generate_bookmarks": {"ja": "字幕からブックマーク生成",        "en": "Generate Bookmarks from Subtitles"},
+    "msg.subtitle_not_loaded.title":    {"ja": "字幕が読み込まれていません",         "en": "No Subtitle Loaded"},
+    "msg.subtitle_not_loaded.body":     {"ja": "字幕ファイルが読み込まれていません。先に字幕ファイルを開いてください。", "en": "No subtitle file is loaded. Please open a subtitle file first."},
+    "msg.subtitle_generate_success.title": {"ja": "ブックマーク生成完了",           "en": "Bookmarks Generated"},
+    "msg.subtitle_generate_success.body":  {"ja": "{n} 件のブックマークを生成しました。", "en": "Generated {n} bookmarks."},
+    "msg.subtitle_generate_skipped.title": {"ja": "ブックマーク生成完了",           "en": "Bookmarks Generated"},
+    "msg.subtitle_generate_skipped.body":  {"ja": "{n} 件のブックマークを生成しました（{m} 件スキップ）。", "en": "Generated {n} bookmarks ({m} skipped)."},
+    "msg.encoding_error.title":         {"ja": "エンコーディングエラー",             "en": "Encoding Error"},
+    "msg.encoding_error.body":          {"ja": "字幕ファイルのエンコーディングを認識できませんでした。UTF-8 または Shift-JIS 形式のファイルを使用してください。", "en": "Could not detect subtitle file encoding. Please use UTF-8 or Shift-JIS encoding."},
+    # F-402: データの一括バックアップ・復元
+    "menu.file.backup_data":            {"ja": "データをバックアップ...",            "en": "Backup Data..."},
+    "menu.file.restore_data":           {"ja": "データを復元...",                    "en": "Restore Data..."},
+    "msg.backup_success.title":         {"ja": "バックアップ完了",                   "en": "Backup Complete"},
+    "msg.backup_success.body":          {"ja": "{filename} にバックアップを保存しました。", "en": "Backup saved to {filename}."},
+    "msg.backup_no_data.title":         {"ja": "バックアップ対象なし",               "en": "No Data to Backup"},
+    "msg.backup_no_data.body":          {"ja": "バックアップ対象のデータファイルが見つかりませんでした。", "en": "No data files found to backup."},
+    "msg.backup_write_error.title":     {"ja": "バックアップエラー",                 "en": "Backup Error"},
+    "msg.backup_write_error.body":      {"ja": "バックアップの保存に失敗しました:\n{error}", "en": "Failed to save backup:\n{error}"},
+    "msg.restore_confirm.title":        {"ja": "データを復元",                       "en": "Restore Data"},
+    "msg.restore_confirm.body":         {"ja": "現在のデータはすべて上書きされます。よろしいですか？", "en": "All current data will be overwritten. Are you sure?"},
+    "msg.restore_success.title":        {"ja": "復元完了",                           "en": "Restore Complete"},
+    "msg.restore_success.body":         {"ja": "復元が完了しました。アプリを再起動してください。", "en": "Restore complete. Please restart the application."},
+    "msg.restore_invalid.title":        {"ja": "無効なバックアップファイル",          "en": "Invalid Backup File"},
+    "msg.restore_invalid.body":         {"ja": "このファイルは looplay! バックアップではありません。", "en": "This file is not a looplay! backup."},
+    "msg.restore_corrupt.title":        {"ja": "バックアップファイルが破損しています",  "en": "Corrupt Backup File"},
+    "msg.restore_corrupt.body":         {"ja": "バックアップファイルが破損しているため復元できません。", "en": "The backup file is corrupt and cannot be restored."},
+    "msg.restore_write_error.title":    {"ja": "復元エラー",                         "en": "Restore Error"},
+    "msg.restore_write_error.body":     {"ja": "データの復元に失敗しました:\n{error}", "en": "Failed to restore data:\n{error}"},
 }
 
 # ── 公開 API ────────────────────────────────────────────────

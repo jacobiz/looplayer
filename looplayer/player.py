@@ -339,6 +339,17 @@ class VideoPlayer(QMainWindow):
 
         file_menu.addSeparator()
 
+        # F-402: データバックアップ・復元
+        backup_action = QAction(t("menu.file.backup_data"), self)
+        backup_action.triggered.connect(self._backup_data)
+        file_menu.addAction(backup_action)
+
+        restore_action = QAction(t("menu.file.restore_data"), self)
+        restore_action.triggered.connect(self._restore_data)
+        file_menu.addAction(restore_action)
+
+        file_menu.addSeparator()
+
         # 011: クリップ書き出し
         self._clip_export_action = QAction(t("menu.file.export_clip"), self)
         self._clip_export_action.setShortcut(QKeySequence("Ctrl+E"))
@@ -494,7 +505,7 @@ class VideoPlayer(QMainWindow):
         undo_action = QAction(t("action.undo"), self)
         undo_action.setShortcut(QKeySequence("Ctrl+Z"))
         undo_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        undo_action.triggered.connect(lambda: self.bookmark_panel.undo_delete())
+        undo_action.triggered.connect(self._handle_undo)
         self.addAction(undo_action)
 
         # シークショートカット（←/→は音量上下と競合しないよう個別追加）
@@ -1142,12 +1153,20 @@ class VideoPlayer(QMainWindow):
         self._audio_track_menu.setEnabled(len(descs) > 1)
 
     def _rebuild_subtitle_menu(self):
-        """US2 / F-201: 字幕メニューをリアルタイム再構築する。"""
+        """US2 / F-201 / F-202: 字幕メニューをリアルタイム再構築する。"""
         self._subtitle_menu.clear()
         # F-201: 「字幕ファイルを開く」は常に先頭に表示する
         open_action = QAction(t("menu.playback.subtitle.open_file"), self)
         open_action.triggered.connect(self._open_subtitle_file)
         self._subtitle_menu.addAction(open_action)
+        # F-202: 「字幕からブックマーク生成」（外部字幕が読み込まれている場合のみ有効）
+        gen_action = QAction(t("menu.playback.subtitle.generate_bookmarks"), self)
+        gen_action.setEnabled(
+            self._current_video_path is not None
+            and self._external_subtitle_path is not None
+        )
+        gen_action.triggered.connect(self._generate_bookmarks_from_subtitles)
+        self._subtitle_menu.addAction(gen_action)
         self._subtitle_menu.addSeparator()
         descs = self.media_player.video_get_spu_description() or []
         group = QActionGroup(self)
@@ -1222,6 +1241,135 @@ class VideoPlayer(QMainWindow):
             return
 
         self._external_subtitle_path = sub_path
+
+    def _handle_undo(self) -> None:
+        """Ctrl+Z: 一括生成 Undo を優先し、なければ削除 Undo にフォールバック（FR-008）。"""
+        if self.bookmark_panel._last_bulk_add:
+            self.bookmark_panel.undo_bulk_add()
+        else:
+            self.bookmark_panel.undo_delete()
+
+    def _generate_bookmarks_from_subtitles(self) -> None:
+        """F-202: 字幕ファイルからブックマークを一括生成する（FR-001〜FR-008）。"""
+        from looplayer.subtitle_parser import parse_subtitle_file, entries_to_bookmarks
+        if self._external_subtitle_path is None:
+            QMessageBox.warning(
+                self,
+                t("msg.subtitle_not_loaded.title"),
+                t("msg.subtitle_not_loaded.body"),
+            )
+            return
+        if self._current_video_path is None:
+            return
+        try:
+            entries = parse_subtitle_file(self._external_subtitle_path)
+        except (ValueError, OSError):
+            QMessageBox.warning(
+                self,
+                t("msg.encoding_error.title"),
+                t("msg.encoding_error.body"),
+            )
+            return
+        existing = self._store.get_bookmarks(self._current_video_path)
+        result = entries_to_bookmarks(entries, start_order=len(existing))
+        if result.bookmarks:
+            self._store.add_many(self._current_video_path, result.bookmarks)
+            self.bookmark_panel.set_last_bulk_add(result.bookmarks)
+            self.bookmark_panel.load_video(self._current_video_path)
+        if result.skipped > 0:
+            QMessageBox.information(
+                self,
+                t("msg.subtitle_generate_skipped.title"),
+                t("msg.subtitle_generate_skipped.body").format(
+                    n=result.added, m=result.skipped
+                ),
+            )
+        else:
+            QMessageBox.information(
+                self,
+                t("msg.subtitle_generate_success.title"),
+                t("msg.subtitle_generate_success.body").format(n=result.added),
+            )
+
+    def _backup_data(self) -> None:
+        """F-402: データをバックアップする（FR-009〜FR-011）。"""
+        from looplayer.data_backup import BackupError, create_backup, generate_backup_filename
+        filename = generate_backup_filename()
+        path_str, _ = QFileDialog.getSaveFileName(
+            self,
+            t("menu.file.backup_data"),
+            filename,
+            "ZIP ファイル (*.zip)",
+        )
+        if not path_str:
+            return
+        try:
+            create_backup(Path(path_str))
+            QMessageBox.information(
+                self,
+                t("msg.backup_success.title"),
+                t("msg.backup_success.body").format(filename=Path(path_str).name),
+            )
+        except BackupError:
+            QMessageBox.warning(
+                self,
+                t("msg.backup_no_data.title"),
+                t("msg.backup_no_data.body"),
+            )
+        except OSError as e:
+            QMessageBox.warning(
+                self,
+                t("msg.backup_write_error.title"),
+                t("msg.backup_write_error.body").format(error=str(e)),
+            )
+
+    def _restore_data(self) -> None:
+        """F-402: バックアップからデータを復元する（FR-012〜FR-015）。"""
+        from looplayer.data_backup import BackupError, restore_backup
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            t("menu.file.restore_data"),
+            "",
+            "ZIP ファイル (*.zip);;すべてのファイル (*)",
+        )
+        if not path_str:
+            return
+        reply = QMessageBox.question(
+            self,
+            t("msg.restore_confirm.title"),
+            t("msg.restore_confirm.body"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            restore_backup(Path(path_str))
+            QMessageBox.information(
+                self,
+                t("msg.restore_success.title"),
+                t("msg.restore_success.body"),
+            )
+            QApplication.instance().quit()
+        except BackupError as e:
+            if e.reason == "corrupt":
+                QMessageBox.warning(
+                    self,
+                    t("msg.restore_corrupt.title"),
+                    t("msg.restore_corrupt.body"),
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    t("msg.restore_invalid.title"),
+                    t("msg.restore_invalid.body"),
+                )
+        except OSError as e:
+            QMessageBox.warning(
+                self,
+                t("msg.restore_write_error.title"),
+                t("msg.restore_write_error.body").format(error=str(e)),
+            )
 
     def _take_screenshot(self):
         """US3: 現在フレームをデスクトップに PNG 保存する（T013）。"""
@@ -1742,12 +1890,16 @@ class VideoPlayer(QMainWindow):
                             desc = vlc.libvlc_media_get_codec_description(
                                 vlc.TrackType.video, track.codec
                             )
+                            if isinstance(desc, bytes):
+                                desc = desc.decode("utf-8", errors="replace")
                             video_codec_str = desc if desc else "不明"
                     elif track.type == vlc.TrackType.audio and audio_codec_str == "不明":
                         if track.codec:
                             desc = vlc.libvlc_media_get_codec_description(
                                 vlc.TrackType.audio, track.codec
                             )
+                            if isinstance(desc, bytes):
+                                desc = desc.decode("utf-8", errors="replace")
                             audio_codec_str = desc if desc else "不明"
 
         # ── ダイアログ構築 ──
