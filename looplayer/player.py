@@ -99,6 +99,9 @@ class VideoPlayer(QMainWindow):
         # US4: ループ間ポーズタイマー（スペースキーでキャンセル可能なので singleShot でなく QTimer インスタンス）
         self._pause_timer: QTimer | None = None
 
+        # B点到達後のシーク完了待ちクールダウン（二重トリガー防止）
+        self._b_handled_cooldown: int = 0
+
         # 音量状態
         self._volume: int = 80
         self._is_muted: bool = False
@@ -206,12 +209,12 @@ class VideoPlayer(QMainWindow):
 
         # Playback controls
         ctrl_layout = QHBoxLayout()
-        self.open_btn = QPushButton("開く")
+        self.open_btn = QPushButton(t("btn.open"))
         self.open_btn.clicked.connect(self.open_file)
         self.play_btn = QPushButton(t("btn.play"))
         self.play_btn.setToolTip(t("tooltip.btn.play"))
         self.play_btn.clicked.connect(self.toggle_play)
-        self.stop_btn = QPushButton("停止")
+        self.stop_btn = QPushButton(t("btn.stop"))
         self.stop_btn.clicked.connect(self.stop)
         ctrl_layout.addWidget(self.open_btn)
         ctrl_layout.addWidget(self.play_btn)
@@ -221,17 +224,17 @@ class VideoPlayer(QMainWindow):
 
         # AB loop controls
         ab_layout = QHBoxLayout()
-        self.set_a_btn = QPushButton("A点セット")
+        self.set_a_btn = QPushButton(t("btn.set_a"))
         self.set_a_btn.setToolTip(t("tooltip.btn.set_a"))
         self.set_a_btn.clicked.connect(self.set_point_a)
-        self.set_b_btn = QPushButton("B点セット")
+        self.set_b_btn = QPushButton(t("btn.set_b"))
         self.set_b_btn.setToolTip(t("tooltip.btn.set_b"))
         self.set_b_btn.clicked.connect(self.set_point_b)
         self.ab_toggle_btn = QPushButton(t("btn.ab_loop_off"))
         self.ab_toggle_btn.setToolTip(t("tooltip.btn.ab_loop"))
         self.ab_toggle_btn.setCheckable(True)
         self.ab_toggle_btn.clicked.connect(self.toggle_ab_loop)
-        self.ab_reset_btn = QPushButton("ABリセット")
+        self.ab_reset_btn = QPushButton(t("btn.ab_reset"))
         self.ab_reset_btn.clicked.connect(self.reset_ab)
         self.ab_info_label = QLabel("A: --  B: --")
         self._zoom_btn = QPushButton(t("btn.zoom_mode"))
@@ -250,7 +253,7 @@ class VideoPlayer(QMainWindow):
 
         # ブックマーク保存ボタン（FR-001: A・B点設定済み時のみ有効）
         bookmark_save_layout = QHBoxLayout()
-        self.save_bookmark_btn = QPushButton("ブックマーク保存")
+        self.save_bookmark_btn = QPushButton(t("btn.save_bookmark"))
         self.save_bookmark_btn.setEnabled(False)
         self.save_bookmark_btn.clicked.connect(self._save_bookmark)
         bookmark_save_layout.addWidget(self.save_bookmark_btn)
@@ -488,20 +491,20 @@ class VideoPlayer(QMainWindow):
         view_menu.addAction(self.mirror_action)
 
         # US5: ブックマーク削除 Undo (Ctrl+Z)
-        undo_action = QAction("元に戻す", self)
+        undo_action = QAction(t("action.undo"), self)
         undo_action.setShortcut(QKeySequence("Ctrl+Z"))
         undo_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         undo_action.triggered.connect(lambda: self.bookmark_panel.undo_delete())
         self.addAction(undo_action)
 
         # シークショートカット（←/→は音量上下と競合しないよう個別追加）
-        seek_back_action = QAction("5秒戻る", self)
+        seek_back_action = QAction(t("action.seek_back"), self)
         seek_back_action.setShortcut(QKeySequence(Qt.Key.Key_Left))
         seek_back_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         seek_back_action.triggered.connect(lambda: self._seek_relative(-5000))
         self.addAction(seek_back_action)
 
-        seek_fwd_action = QAction("5秒進む", self)
+        seek_fwd_action = QAction(t("action.seek_fwd"), self)
         seek_fwd_action.setShortcut(QKeySequence(Qt.Key.Key_Right))
         seek_fwd_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         seek_fwd_action.triggered.connect(lambda: self._seek_relative(5000))
@@ -772,7 +775,7 @@ class VideoPlayer(QMainWindow):
             output_path=Path(out_path),
         )
         self._clip_export_action.setEnabled(False)
-        dlg = ExportProgressDialog(job, parent=self)
+        dlg = ExportProgressDialog(job, parent=self, settings=self._app_settings)
         result = dlg.exec()
 
         self._update_clip_export_action_state()
@@ -1009,6 +1012,11 @@ class VideoPlayer(QMainWindow):
         if self._pause_timer is not None:
             return
 
+        # B点到達直後のシーク完了待ちクールダウン（二重トリガー防止）
+        if self._b_handled_cooldown > 0:
+            self._b_handled_cooldown -= 1
+            return
+
         # 連続再生チェック（通常の AB ループより優先）
         if self._seq_state and self._seq_state.active:
             if length_ms > 0:
@@ -1027,16 +1035,8 @@ class VideoPlayer(QMainWindow):
                         # US5: 1周停止モード — 連続再生終了
                         self._stop_seq_play()
                         return
-                    # US4: ポーズ間隔
-                    if bm.pause_ms > 0:
-                        self.media_player.pause()
-                        timer = QTimer(self)
-                        timer.setSingleShot(True)
-                        timer.timeout.connect(lambda a=next_a: self._resume_after_pause(a))
-                        self._pause_timer = timer
-                        timer.start(bm.pause_ms)
-                    else:
-                        self.media_player.set_time(next_a)
+                    self._b_handled_cooldown = 3  # 次の 3 tick（600ms）は B点判定をスキップ
+                    self._start_pause_or_seek(next_a, bm.pause_ms)
                     self.bookmark_panel.update_seq_status(self._seq_state)
                     # US1 T017: ブックマーク遷移時にスライダーの強調表示を更新
                     self._sync_slider_bookmarks()
@@ -1060,15 +1060,20 @@ class VideoPlayer(QMainWindow):
                                 if updated_bm:
                                     self.bookmark_panel.update_play_count(bm.id, updated_bm.play_count)
                                 break
-                    if pause_ms > 0:
-                        self.media_player.pause()
-                        timer = QTimer(self)
-                        timer.setSingleShot(True)
-                        timer.timeout.connect(lambda a=self.ab_point_a: self._resume_after_pause(a))
-                        self._pause_timer = timer
-                        timer.start(pause_ms)
-                    else:
-                        self.media_player.set_time(self.ab_point_a)
+                    self._b_handled_cooldown = 3  # 次の 3 tick（600ms）は B点判定をスキップ
+                    self._start_pause_or_seek(self.ab_point_a, pause_ms)
+
+    def _start_pause_or_seek(self, next_a: int, pause_ms: int) -> None:
+        """ポーズ間隔が設定されている場合はポーズタイマーを起動し、そうでなければ即座にシークする。"""
+        if pause_ms > 0:
+            self.media_player.pause()
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(lambda a=next_a: self._resume_after_pause(a))
+            self._pause_timer = timer
+            timer.start(pause_ms)
+        else:
+            self.media_player.set_time(next_a)
 
     # ── 音量・ミュート操作 ────────────────────────────────────
 
@@ -1378,19 +1383,31 @@ class VideoPlayer(QMainWindow):
     # ── 常に最前面操作 ────────────────────────────────────────
 
     def _toggle_mirror_display(self):
-        """左右反転表示をトグルする（F-203）。再生中なら現在位置と速度を保持してメディアを再生成する。"""
+        """左右反転表示をトグルする（F-203）。再生中なら現在位置・速度・AB状態を保持してメディアを再生成する。"""
         new_val = not self._app_settings.mirror_display
         self._app_settings.mirror_display = new_val
         self.mirror_action.setChecked(new_val)
         if self._current_video_path is not None:
             pos = self.media_player.get_time()
             rate = self._playback_rate
+            # _open_path 内の reset_ab() で AB 状態が消えるため事前に保存する
+            saved_a = self.ab_point_a
+            saved_b = self.ab_point_b
+            saved_loop = self.ab_loop_active
             self._open_path(self._current_video_path)
             # VLC がデコードを開始するまで set_time/set_rate が無効なため遅延実行する
-            QTimer.singleShot(300, lambda: (
-                self.media_player.set_time(pos),
-                self._set_playback_rate(rate),
-            ))
+            def _restore():
+                self.media_player.set_time(pos)
+                self._set_playback_rate(rate)
+                # AB 状態を復元
+                self.ab_point_a = saved_a
+                self.ab_point_b = saved_b
+                self.ab_loop_active = saved_loop
+                self.ab_toggle_btn.setChecked(saved_loop)
+                self.ab_toggle_btn.setText(
+                    t("btn.ab_loop_on") if saved_loop else t("btn.ab_loop_off")
+                )
+            QTimer.singleShot(300, _restore)
 
     def _toggle_always_on_top(self):
         """常に最前面フラグをトグルする。"""
@@ -1895,6 +1912,7 @@ class VideoPlayer(QMainWindow):
 
     def closeEvent(self, event):
         """US5: アプリ終了時に現在の再生位置を保存する。F-403: ウィンドウジオメトリを保存する。"""
+        self.timer.stop()
         if self._current_video_path:
             self._playback_position.save(
                 self._current_video_path,
@@ -1910,6 +1928,10 @@ class VideoPlayer(QMainWindow):
             "x": geo.x(), "y": geo.y(),
             "width": geo.width(), "height": geo.height(),
         }
+        # VLC リソースを明示的に解放（GC タイミングによるクラッシュ防止）
+        self.media_player.stop()
+        self.media_player.release()
+        self.instance.release()
         super().closeEvent(event)
 
     def _restore_window_geometry(self) -> None:

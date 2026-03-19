@@ -26,8 +26,9 @@ _CHECK_INTERVAL_SECS = 86400  # 24時間キャッシュ
 
 
 def _parse_version(ver: str) -> tuple[int, ...]:
-    """'v1.2.3' または '1.2.3' をタプルに変換する。"""
-    return tuple(int(x) for x in ver.lstrip("v").split("."))
+    """'v1.2.3' または '1.2.3' をタプルに変換する。プリリリース suffix（-beta 等）は無視する。"""
+    normalized = ver.lstrip("v").split("-")[0]
+    return tuple(int(x) for x in normalized.split("."))
 
 
 def _is_newer(current: str, latest: str) -> bool:
@@ -206,7 +207,7 @@ class DownloadDialog(QDialog):
             self._thread.deleteLater()
             self._thread = None
 
-        filename = self._url.split("/")[-1]
+        filename = Path(self._url.split("/")[-1]).name  # パストラバーサル防止
         self._dest = Path(tempfile.gettempdir()) / filename
 
         self._progress.setValue(0)

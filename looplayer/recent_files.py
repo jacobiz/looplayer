@@ -46,8 +46,12 @@ class RecentFiles:
         """tmp ファイル経由でアトミックに書き込む。"""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(".json.tmp")
-        tmp.write_text(
-            json.dumps({"files": self._files}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        tmp.replace(self._path)
+        try:
+            tmp.write_text(
+                json.dumps({"files": self._files}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            tmp.replace(self._path)
+        except OSError:
+            tmp.unlink(missing_ok=True)
+            raise

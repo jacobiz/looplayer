@@ -88,20 +88,29 @@ class ExportWorker(QThread):
 
         start_time = ClipExportJob._ms_to_ffmpeg_time(self._job.start_ms)
         end_time = ClipExportJob._ms_to_ffmpeg_time(self._job.end_ms)
-        # US10: encode_mode に応じてコーデック引数を切り替える
+        duration_ms = self._job.end_ms - self._job.start_ms
+        duration_time = ClipExportJob._ms_to_ffmpeg_time(duration_ms)
+        # US10: encode_mode に応じてコーデック引数・シーク方式を切り替える
         if self._job.encode_mode == "transcode":
-            codec_args = ["-c:v", "libx264", "-c:a", "aac", "-crf", "23"]
+            # 再エンコード: 入力前 -ss で高速シーク、-to で終端指定
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", start_time,
+                "-to", end_time,
+                "-i", str(self._job.source_path),
+                "-c:v", "libx264", "-c:a", "aac", "-crf", "23",
+                str(self._job.output_path),
+            ]
         else:
-            codec_args = ["-c", "copy"]
-        cmd = [
-            "ffmpeg",
-            "-ss", start_time,
-            "-to", end_time,
-            "-i", str(self._job.source_path),
-            *codec_args,
-            str(self._job.output_path),
-            "-y",
-        ]
+            # ストリームコピー: 入力前 -ss で高速シーク、-t で区間長指定（タイムスタンプずれ防止）
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", start_time,
+                "-i", str(self._job.source_path),
+                "-t", duration_time,
+                "-c", "copy",
+                str(self._job.output_path),
+            ]
 
         try:
             self._process = subprocess.Popen(

@@ -125,5 +125,5 @@ class OnboardingOverlay(QWidget):
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         """親がリサイズされた際に自動的に中央へ追従する。"""
         super().resizeEvent(event)
-        if self.parent() is not None:
+        if isinstance(self.parent(), QWidget):
             self._reposition(self.parent())

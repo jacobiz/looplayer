@@ -162,7 +162,7 @@ def test_export_worker_deletes_file_on_cancel(qtbot, tmp_path):
 
 
 def test_export_worker_builds_correct_ffmpeg_command(qtbot, tmp_path):
-    """ffmpeg コマンドが -ss START -to END -i INPUT -c copy OUTPUT -y の順で組み立てられる。"""
+    """ffmpeg コマンドが copy モードで -y -ss START -i INPUT -t DURATION -c copy OUTPUT の順で組み立てられる。"""
     source = tmp_path / "video.mp4"
     source.touch()
     out = tmp_path / "clip.mp4"
@@ -182,12 +182,13 @@ def test_export_worker_builds_correct_ffmpeg_command(qtbot, tmp_path):
             worker.start()
         worker.wait()
 
+    # copy モード: ffmpeg -y -ss START -i INPUT -t DURATION -c copy OUTPUT
     assert captured_cmd[0] == "ffmpeg"
-    assert captured_cmd[1] == "-ss"
-    assert captured_cmd[3] == "-to"
-    assert captured_cmd[5] == "-i"
-    assert captured_cmd[6] == str(source)
-    assert captured_cmd[7] == "-c"
-    assert captured_cmd[8] == "copy"
-    assert captured_cmd[9] == str(out)
-    assert captured_cmd[10] == "-y"
+    assert captured_cmd[1] == "-y"
+    assert captured_cmd[2] == "-ss"
+    assert captured_cmd[4] == "-i"
+    assert captured_cmd[5] == str(source)
+    assert captured_cmd[6] == "-t"
+    assert captured_cmd[8] == "-c"
+    assert captured_cmd[9] == "copy"
+    assert captured_cmd[10] == str(out)

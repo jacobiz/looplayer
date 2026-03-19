@@ -54,7 +54,7 @@ class LoopBookmark:
             name=d.get("name", ""),
             repeat_count=d.get("repeat_count", 1),
             order=d.get("order", 0),
-            id=d["id"],
+            id=d.get("id", str(uuid.uuid4())),
             enabled=d.get("enabled", True),  # 旧 JSON には enabled キーがないため True にフォールバック
             notes=d.get("notes", ""),  # 旧 JSON には notes キーがないため "" にフォールバック
             pause_ms=d.get("pause_ms", 0),  # 旧 JSON 互換

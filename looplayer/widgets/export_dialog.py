@@ -11,9 +11,10 @@ from looplayer.i18n import t
 class ExportProgressDialog(QDialog):
     """不確定プログレスバーとキャンセルボタンを持つ書き出し進捗ダイアログ。"""
 
-    def __init__(self, job: ClipExportJob, parent=None):
+    def __init__(self, job: ClipExportJob, parent=None, settings=None):
         super().__init__(parent)
         self._job = job
+        self._settings = settings  # AppSettings インスタンス（None の場合は新規生成）
         self._worker: ExportWorker | None = None
         self._setup_ui()
 
@@ -59,10 +60,13 @@ class ExportProgressDialog(QDialog):
         """書き出し開始ボタン: encode_mode を job にセットして export 開始。"""
         mode = "transcode" if self._transcode_radio.isChecked() else "copy"
         self._job.encode_mode = mode
-        # AppSettings に保存
+        # AppSettings に保存（呼び出し元から受け取ったインスタンスを優先）
         try:
-            from looplayer.app_settings import AppSettings
-            AppSettings().export_encode_mode = mode
+            if self._settings is not None:
+                self._settings.export_encode_mode = mode
+            else:
+                from looplayer.app_settings import AppSettings
+                AppSettings().export_encode_mode = mode
         except Exception:
             pass
         self._start_btn.setEnabled(False)
@@ -82,7 +86,7 @@ class ExportProgressDialog(QDialog):
     def _cancel(self) -> None:
         if self._worker and self._worker.isRunning():
             self._worker.requestInterruption()
-            self._worker.wait()
+            self._worker.wait(3000)  # ffmpeg 終了待機（最大 3 秒で UI ブロックを制限）
         self.reject()
 
     def _on_finished(self, path: str) -> None:
@@ -97,5 +101,5 @@ class ExportProgressDialog(QDialog):
     def closeEvent(self, event) -> None:
         if self._worker and self._worker.isRunning():
             self._worker.requestInterruption()
-            self._worker.wait()
+            self._worker.wait(3000)  # ffmpeg 終了待機（最大 3 秒で UI ブロックを制限）
         event.accept()
