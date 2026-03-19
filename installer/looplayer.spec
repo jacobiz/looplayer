@@ -16,6 +16,7 @@ a = Analysis(
     ],
     datas=[
         (str(VLC_DIR / 'plugins'), 'plugins'),
+        ('../assets/icon.png', 'assets'),
     ],
     hiddenimports=['vlc'],
     hookspath=[],
@@ -38,6 +39,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
+    icon='../assets/icon.ico',
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
