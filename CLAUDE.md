@@ -71,6 +71,7 @@ pytest tests/unit/ -v   # ユニットテストのみ
 - Python 3.12.13 + PyQt6 6.10.2, python-vlc 3.0.21203 (015-fix-window-resize)
 - `~/.looplayer/settings.json`（JSON, `AppSettings` クラスで管理） (016-p1-features)
 - `~/.looplayer/settings.json`（`AppSettings` クラスで管理） (017-p2-ux-features)
+- `~/.looplayer/settings.json`（AppSettings、mirror_display フィールド追加） (018-speed-mirror)
 
 ## Recent Changes
 - 012-player-improvements: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203、ffmpeg（US10 のトランスコード用、既存）

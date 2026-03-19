@@ -48,6 +48,9 @@ _STRINGS: dict[str, dict[str, str]] = {
     "menu.view.exit_fullscreen":    {"ja": "フルスクリーン解除",              "en": "Exit Fullscreen"},
     "menu.view.fit_window":         {"ja": "ウィンドウをビデオに合わせる",    "en": "Fit Window to Video"},
     "menu.view.always_on_top":      {"ja": "常に最前面に表示",               "en": "Always on Top"},
+    "menu.view.mirror_display":     {"ja": "左右反転",                        "en": "Mirror Display"},
+    "menu.playback.speed.standard": {"ja": "標準 ({rate}倍)",                 "en": "Standard ({rate}x)"},
+    "menu.playback.speed.rate":     {"ja": "{rate}倍",                        "en": "{rate}x"},
     "menu.help":                    {"ja": "ヘルプ(&H)",                     "en": "Help(&H)"},
     "menu.help.shortcuts":          {"ja": "キーボードショートカット一覧",    "en": "Keyboard Shortcuts"},
     "menu.help.check_update":       {"ja": "更新を確認...",                   "en": "Check for Updates..."},
@@ -93,6 +96,8 @@ _STRINGS: dict[str, dict[str, str]] = {
     "status.screenshot_saved":      {"ja": "保存しました: {path}",           "en": "Saved: {path}"},
     "status.max_speed":             {"ja": "最大速度です",                    "en": "Maximum speed"},
     "status.min_speed":             {"ja": "最小速度です",                    "en": "Minimum speed"},
+    "status.speed_fine_up":         {"ja": "速度 +0.05x",                     "en": "Speed +0.05x"},
+    "status.speed_fine_down":       {"ja": "速度 -0.05x",                     "en": "Speed -0.05x"},
     # ダイアログタイトル
     "dialog.video_info.title":      {"ja": "動画情報",                       "en": "Video Info"},
     "dialog.shortcuts.title":       {"ja": "キーボードショートカット一覧",    "en": "Keyboard Shortcuts"},
