@@ -613,9 +613,9 @@ class VideoPlayer(QMainWindow):
     def open_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "動画ファイルを開く",
+            t("dialog.open_video.title"),
             "",
-            "動画ファイル (*.mp4 *.avi *.mkv *.mov *.wmv *.flv *.webm *.m4v);;すべてのファイル (*)"
+            t("filter.video_file"),
         )
         if not path:
             return
@@ -773,7 +773,7 @@ class VideoPlayer(QMainWindow):
             self,
             t("menu.file.export_clip"),
             str(source.parent / default_name),
-            f"動画ファイル (*{suffix});;すべてのファイル (*)",
+            t("filter.video_file_ext").format(ext=suffix),
         )
         if not out_path:
             return
@@ -825,7 +825,7 @@ class VideoPlayer(QMainWindow):
         if self._current_video_path is None:
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "ブックマークをエクスポート", "", "JSON ファイル (*.json);;すべてのファイル (*)"
+            self, t("menu.file.export"), "", t("filter.json_file")
         )
         if not path:
             return
@@ -841,7 +841,7 @@ class VideoPlayer(QMainWindow):
             QMessageBox.warning(self, t("msg.no_video.title"), t("msg.no_video.body"))
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "ブックマークをインポート", "", "JSON ファイル (*.json);;すべてのファイル (*)"
+            self, t("menu.file.import"), "", t("filter.json_file")
         )
         if not path:
             return
@@ -1171,7 +1171,7 @@ class VideoPlayer(QMainWindow):
         descs = self.media_player.video_get_spu_description() or []
         group = QActionGroup(self)
         group.setExclusive(True)
-        off_action = QAction("字幕なし", self)
+        off_action = QAction(t("menu.playback.subtitle.none"), self)
         off_action.setCheckable(True)
         off_action.setChecked(self.media_player.video_get_spu() == -1)
         off_action.triggered.connect(lambda: self.media_player.video_set_spu(-1))
@@ -1216,7 +1216,7 @@ class VideoPlayer(QMainWindow):
             self,
             t("menu.playback.subtitle.open_file"),
             "",
-            "字幕ファイル (*.srt *.ass *.ssa *.vtt);;すべてのファイル (*)",
+            t("filter.subtitle_file"),
         )
         if not path_str:
             return
@@ -1299,7 +1299,7 @@ class VideoPlayer(QMainWindow):
             self,
             t("menu.file.backup_data"),
             filename,
-            "ZIP ファイル (*.zip)",
+            t("filter.zip_file"),
         )
         if not path_str:
             return
@@ -1330,7 +1330,7 @@ class VideoPlayer(QMainWindow):
             self,
             t("menu.file.restore_data"),
             "",
-            "ZIP ファイル (*.zip);;すべてのファイル (*)",
+            t("filter.zip_file_all"),
         )
         if not path_str:
             return
@@ -1692,7 +1692,9 @@ class VideoPlayer(QMainWindow):
         if self.ab_point_a is None or self.ab_point_b is None:
             return
         # US3: 名前入力ダイアログを表示
-        default_name = f"ブックマーク {ms_to_str(self.ab_point_a)}-{ms_to_str(self.ab_point_b)}"
+        default_name = t("bookmark.default_name").format(
+            time=f"{ms_to_str(self.ab_point_a)}-{ms_to_str(self.ab_point_b)}"
+        )
         name, ok = QInputDialog.getText(
             self, t("bookmark.save_title"), t("bookmark.save_prompt"), text=default_name
         )
@@ -1859,16 +1861,16 @@ class VideoPlayer(QMainWindow):
         try:
             size_str = self._format_file_size(os.path.getsize(self._current_video_path))
         except OSError:
-            size_str = "不明"
+            size_str = t("label.unknown")
 
         length_ms = self.media_player.get_length()
-        length_str = ms_to_str(length_ms) if length_ms > 0 else "不明"
+        length_str = ms_to_str(length_ms) if length_ms > 0 else t("label.unknown")
 
         # ── VLC トラック情報 ──
-        resolution_str = "不明"
-        fps_str = "不明"
-        video_codec_str = "不明"
-        audio_codec_str = "不明"
+        resolution_str: str | None = None
+        fps_str: str | None = None
+        video_codec_str: str | None = None
+        audio_codec_str: str | None = None
 
         media = self.media_player.get_media()
         if media is not None:
@@ -1878,7 +1880,7 @@ class VideoPlayer(QMainWindow):
             if tracks:
                 for track in tracks:
                     # python-vlc 3.0.x では TrackType 属性名は小文字（.video / .audio）
-                    if track.type == vlc.TrackType.video and resolution_str == "不明":
+                    if track.type == vlc.TrackType.video and resolution_str is None:
                         v = track.video.contents if track.video else None
                         if v:
                             if v.width and v.height:
@@ -1892,15 +1894,15 @@ class VideoPlayer(QMainWindow):
                             )
                             if isinstance(desc, bytes):
                                 desc = desc.decode("utf-8", errors="replace")
-                            video_codec_str = desc if desc else "不明"
-                    elif track.type == vlc.TrackType.audio and audio_codec_str == "不明":
+                            video_codec_str = desc if desc else None
+                    elif track.type == vlc.TrackType.audio and audio_codec_str is None:
                         if track.codec:
                             desc = vlc.libvlc_media_get_codec_description(
                                 vlc.TrackType.audio, track.codec
                             )
                             if isinstance(desc, bytes):
                                 desc = desc.decode("utf-8", errors="replace")
-                            audio_codec_str = desc if desc else "不明"
+                            audio_codec_str = desc if desc else None
 
         # ── ダイアログ構築 ──
         dialog = QDialog(self)
@@ -1910,14 +1912,15 @@ class VideoPlayer(QMainWindow):
         grid.setColumnMinimumWidth(0, 120)
         grid.setSpacing(6)
 
+        unknown = t("label.unknown")
         rows = [
-            ("ファイル名", filename),
-            ("ファイルサイズ", size_str),
-            ("再生時間", length_str),
-            ("解像度", resolution_str),
-            ("フレームレート", fps_str),
-            ("映像コーデック", video_codec_str),
-            ("音声コーデック", audio_codec_str),
+            (t("dialog.video_info.filename"),    filename),
+            (t("dialog.video_info.filesize"),    size_str),
+            (t("dialog.video_info.duration"),    length_str),
+            (t("dialog.video_info.resolution"),  resolution_str or unknown),
+            (t("dialog.video_info.framerate"),   fps_str or unknown),
+            (t("dialog.video_info.video_codec"), video_codec_str or unknown),
+            (t("dialog.video_info.audio_codec"), audio_codec_str or unknown),
         ]
         for row_idx, (key, value) in enumerate(rows):
             key_label = QLabel(key + ":")
@@ -1935,47 +1938,49 @@ class VideoPlayer(QMainWindow):
 
     # ── US4: ショートカット一覧ダイアログ ──────────────────────────
 
-    # 全ショートカット定義（6カテゴリ）
-    _SHORTCUTS = [
-        ("再生操作", [
-            ("Space", "再生 / 一時停止"),
-            ("←", "5秒戻る"),
-            ("→", "5秒進む"),
-            ("Shift+←", "-1秒シーク"),
-            ("Shift+→", "+1秒シーク"),
-            ("Ctrl+←", "-10秒シーク"),
-            ("Ctrl+→", "+10秒シーク"),
-            (",", "1フレーム戻る（自動一時停止）"),
-            (".", "1フレーム進む（自動一時停止）"),
-            ("[", "再生速度を下げる"),
-            ("]", "再生速度を上げる"),
-        ]),
-        ("音量操作", [
-            ("↑", "音量を上げる (+10)"),
-            ("↓", "音量を下げる (−10)"),
-            ("M", "ミュート切り替え"),
-        ]),
-        ("AB ループ操作", [
-            ("I", t("shortcut.set_a")),
-            ("O", t("shortcut.set_b")),
-            ("A点セット", "ボタンクリックで A 点を設定"),
-            ("B点セット", "ボタンクリックで B 点を設定"),
-        ]),
-        ("ブックマーク操作", [
-            ("ブックマーク保存", "ボタンクリックで現在の AB 区間を保存"),
-            ("Ctrl+Z", "ブックマーク削除を元に戻す（5 秒以内）"),
-        ]),
-        ("表示操作", [
-            ("F", "フルスクリーン 切り替え"),
-            ("Escape", "フルスクリーン 解除"),
-        ]),
-        ("ファイル操作", [
-            ("Ctrl+O", "ファイルを開く"),
-            ("Ctrl+Shift+S", "スクリーンショット保存"),
-            ("Ctrl+Q", "終了"),
-            ("?", "ショートカット一覧を表示"),
-        ]),
-    ]
+    @staticmethod
+    def _get_shortcuts() -> list:
+        """ショートカット定義を返す（UI文字列は t() 経由で取得）。"""
+        return [
+            (t("shortcut.cat.playback"), [
+                ("Space",     t("shortcut.play_pause")),
+                ("←",        t("shortcut.seek_back5")),
+                ("→",        t("shortcut.seek_fwd5")),
+                ("Shift+←",  t("shortcut.seek_back1")),
+                ("Shift+→",  t("shortcut.seek_fwd1")),
+                ("Ctrl+←",   t("shortcut.seek_back10")),
+                ("Ctrl+→",   t("shortcut.seek_fwd10")),
+                (",",         t("shortcut.frame_back")),
+                (".",         t("shortcut.frame_fwd")),
+                ("[",         t("shortcut.speed_down")),
+                ("]",         t("shortcut.speed_up")),
+            ]),
+            (t("shortcut.cat.volume"), [
+                ("↑", t("shortcut.vol_up")),
+                ("↓", t("shortcut.vol_down")),
+                ("M", t("shortcut.mute")),
+            ]),
+            (t("shortcut.cat.ab_loop"), [
+                ("I",                    t("shortcut.set_a")),
+                ("O",                    t("shortcut.set_b")),
+                (t("shortcut.set_a_btn"), t("shortcut.set_a_btn.desc")),
+                (t("shortcut.set_b_btn"), t("shortcut.set_b_btn.desc")),
+            ]),
+            (t("shortcut.cat.bookmark"), [
+                (t("shortcut.bookmark_save"), t("shortcut.bookmark_save.desc")),
+                ("Ctrl+Z",                    t("shortcut.undo_delete")),
+            ]),
+            (t("shortcut.cat.view"), [
+                ("F",      t("shortcut.fullscreen")),
+                ("Escape", t("shortcut.fullscreen_exit")),
+            ]),
+            (t("shortcut.cat.file"), [
+                ("Ctrl+O",       t("shortcut.open_file")),
+                ("Ctrl+Shift+S", t("shortcut.screenshot")),
+                ("Ctrl+Q",       t("shortcut.quit")),
+                ("?",            t("shortcut.show_shortcuts")),
+            ]),
+        ]
 
     def _show_shortcut_dialog(self) -> None:
         """US4: ショートカット一覧ダイアログを表示する（FR-014）。"""
@@ -1992,7 +1997,7 @@ class VideoPlayer(QMainWindow):
         grid.setColumnMinimumWidth(1, 200)
 
         row = 0
-        for category, entries in self._SHORTCUTS:
+        for category, entries in self._get_shortcuts():
             cat_label = QLabel(f"【{category}】")
             cat_label.setStyleSheet("font-weight: bold; margin-top: 6px;")
             grid.addWidget(cat_label, row, 0, 1, 2)
@@ -2167,7 +2172,7 @@ class VideoPlayer(QMainWindow):
 
     def _show_error_dialog(self):
         """UI スレッドでエラーダイアログを表示する。直前の再生状態は変更しない。"""
-        QMessageBox.warning(self, "エラー", "動画ファイルを開けませんでした。")
+        QMessageBox.warning(self, t("msg.media_error.title"), t("msg.media_error.body"))
 
 
 def main():
