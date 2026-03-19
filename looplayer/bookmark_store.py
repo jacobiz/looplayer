@@ -150,6 +150,24 @@ class BookmarkStore:
         bms.append(bookmark)
         self._save_all()
 
+    def add_many(self, video_path: str, bookmarks: list[LoopBookmark]) -> None:
+        """複数のブックマークを一括追加して永続化する（F-202）。
+
+        既存ブックマークの末尾に追記する（FR-006）。
+        バリデーションは呼び出し元（subtitle_parser.entries_to_bookmarks）で完了済みのため、
+        ここでは A点/B点チェックを行わず order を連番で付与して追加する。
+        """
+        if not bookmarks:
+            return
+        bms = self._data.setdefault(video_path, [])
+        base_order = len(bms)
+        for i, bookmark in enumerate(bookmarks):
+            bookmark.order = base_order + i
+            if not bookmark.name:
+                bookmark.name = f"ブックマーク {base_order + i + 1}"
+            bms.append(bookmark)
+        self._save_all()
+
     def delete(self, video_path: str, bookmark_id: str) -> None:
         """ID でブックマークを削除して永続化する。"""
         bms = self._data.get(video_path, [])

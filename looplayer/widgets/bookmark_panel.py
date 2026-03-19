@@ -34,6 +34,8 @@ class BookmarkPanel(QWidget):
 
         # US5: 削除 Undo 用の保留状態
         self._pending_delete: dict | None = None
+        # F-202: 一括生成 Undo 用の最終追加リスト
+        self._last_bulk_add: list[LoopBookmark] = []
         self._undo_timer = QTimer(self)
         self._undo_timer.setSingleShot(True)
         self._undo_timer.setInterval(5000)
@@ -201,6 +203,28 @@ class BookmarkPanel(QWidget):
     def undo_delete(self) -> None:
         """US5: _undo_delete の公開インターフェース（player.py から呼ぶ用）。"""
         self._undo_delete()
+
+    # ── F-202: 字幕からの一括生成 Undo ──────────────────────
+
+    def set_last_bulk_add(self, bookmarks: list[LoopBookmark]) -> None:
+        """一括生成されたブックマークを Undo 用に記録する（FR-008）。"""
+        self._last_bulk_add = list(bookmarks)
+
+    def undo_bulk_add(self) -> None:
+        """一括生成されたブックマークを全件削除する（FR-008）。
+
+        player.py の Ctrl+Z ハンドラから呼ぶ用。
+        _pending_delete（削除 Undo）が有効な場合は先にコミットして競合を防ぐ。
+        """
+        if not self._last_bulk_add or self._video_path is None:
+            return
+        # 削除 Undo 待機中の場合は先にコミットして状態を一貫させる
+        if self._pending_delete is not None:
+            self._commit_delete()
+        for bm in self._last_bulk_add:
+            self._store.delete(self._video_path, bm.id)
+        self._last_bulk_add = []
+        self._refresh_list()
 
     def _on_enabled_changed(self, bookmark_id: str, enabled: bool) -> None:
         """FR-006/FR-009: チェックボックス変更時に enabled を永続化し、seq_btn の有効状態を更新する。"""
