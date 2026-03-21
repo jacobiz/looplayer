@@ -1,4 +1,4 @@
 """アプリケーションバージョン情報。"""
-VERSION = "1.9.6"
+VERSION = "2.0.0"
 APP_NAME = "looplay!"
 PUBLISHER = "looplay! Project"

@@ -5,7 +5,7 @@ from pathlib import Path
 
 @dataclass
 class Playlist:
-    """動画ファイルのプレイリスト。files はファイル名昇順で渡すこと。"""
+    """メディアファイルのプレイリスト（動画・音楽）。files はファイル名昇順で渡すこと。"""
     files: list[Path]
     index: int = 0
 

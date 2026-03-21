@@ -19,6 +19,8 @@ def player(qtbot: QtBot, tmp_path: Path) -> VideoPlayer:
         widget.show()
         yield widget
         widget.timer.stop()
+
+        widget._size_poll_timer.stop()
         widget.media_player.stop()
 
 
@@ -40,6 +42,8 @@ class TestStartupUpdateCheck:
             qtbot.addWidget(widget)
             widget.show()
             widget.timer.stop()
+
+            widget._size_poll_timer.stop()
             widget.media_player.stop()
 
         # UpdateChecker が 1 回だけ起動されたことを確認（SC-005: 同一セッション中再通知なし）
@@ -58,6 +62,8 @@ class TestStartupUpdateCheck:
             qtbot.addWidget(widget)
             widget.show()
             widget.timer.stop()
+
+            widget._size_poll_timer.stop()
             widget.media_player.stop()
 
         MockChecker.assert_not_called()
@@ -132,6 +138,8 @@ class TestAutoCheckSetting:
             widget.show()
             widget._toggle_auto_check(False)
             widget.timer.stop()
+
+            widget._size_poll_timer.stop()
             widget.media_player.stop()
 
         import json

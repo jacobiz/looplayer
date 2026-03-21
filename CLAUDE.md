@@ -74,6 +74,7 @@ pytest tests/unit/ -v   # ユニットテストのみ
 - `~/.looplayer/settings.json`（AppSettings、mirror_display フィールド追加） (018-speed-mirror)
 - Python 3.12.13 + PyQt6 6.10.2（UI）、標準ライブラリ: `zipfile`, `json`, `re`, `shutil`, `datetime` (019-subtitle-bookmark-backup)
 - `~/.looplayer/bookmarks.json`・`settings.json`・`positions.json`・`recent_files.json`（既存）; バックアップ用 ZIP ファイル (019-subtitle-bookmark-backup)
+- `~/.looplayer/bookmarks.json`, `positions.json`, `recent_files.json`（既存、変更なし） (020-music-playback)
 
 ## Recent Changes
 - 012-player-improvements: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203、ffmpeg（US10 のトランスコード用、既存）
