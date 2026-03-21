@@ -31,7 +31,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     "menu.file.export_clip":        {"ja": "クリップを書き出す...",           "en": "Export Clip..."},
     "menu.file.quit":               {"ja": "終了(&Q)",                       "en": "Quit(&Q)"},
     "menu.playback":                {"ja": "再生(&P)",                       "en": "Playback(&P)"},
-    "menu.playback.play_pause":     {"ja": "再生/一時停止",                   "en": "Play/Pause"},
+    "menu.playback.play_pause":     {"ja": "再生 / 一時停止",                 "en": "Play / Pause"},
     "menu.playback.stop":           {"ja": "停止",                           "en": "Stop"},
     "menu.playback.vol_up":         {"ja": "音量アップ",                     "en": "Volume Up"},
     "menu.playback.vol_down":       {"ja": "音量ダウン",                     "en": "Volume Down"},
@@ -46,7 +46,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     "menu.view":                    {"ja": "表示(&V)",                       "en": "View(&V)"},
     "menu.view.fullscreen":         {"ja": "フルスクリーン",                  "en": "Fullscreen"},
     "menu.view.exit_fullscreen":    {"ja": "フルスクリーン解除",              "en": "Exit Fullscreen"},
-    "menu.view.fit_window":         {"ja": "ウィンドウをビデオに合わせる",    "en": "Fit Window to Video"},
+    "menu.view.fit_window":         {"ja": "ウィンドウを動画に合わせる",     "en": "Fit Window to Video"},
     "menu.view.always_on_top":      {"ja": "常に最前面に表示",               "en": "Always on Top"},
     "menu.view.mirror_display":     {"ja": "左右反転",                        "en": "Mirror Display"},
     "menu.playback.speed.standard": {"ja": "標準 ({rate}倍)",                 "en": "Standard ({rate}x)"},
@@ -125,8 +125,8 @@ _STRINGS: dict[str, dict[str, str]] = {
     "bookmark.name.edit_title":     {"ja": "名前を編集",                     "en": "Edit Name"},
     "bookmark.name.edit_prompt":    {"ja": "ブックマーク名:",                 "en": "Bookmark name:"},
     # US1: A/B 点ショートカット
-    "shortcut.set_a":               {"ja": "A点をセット (I)",                 "en": "Set Point A (I)"},
-    "shortcut.set_b":               {"ja": "B点をセット (O)",                 "en": "Set Point B (O)"},
+    "shortcut.set_a":               {"ja": "A点を設定 (I)",                   "en": "Set point A (I)"},
+    "shortcut.set_b":               {"ja": "B点を設定 (O)",                   "en": "Set point B (O)"},
     # US2: フレーム単位微調整
     "btn.frame_minus":              {"ja": "-1F",                             "en": "-1F"},
     "btn.frame_plus":               {"ja": "+1F",                             "en": "+1F"},

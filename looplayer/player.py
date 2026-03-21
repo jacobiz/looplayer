@@ -676,7 +676,7 @@ class VideoPlayer(QMainWindow):
 
         self.media_player.play()
         self.play_btn.setText(t("btn.pause"))
-        self.setWindowTitle(f"Video Player - {os.path.basename(path)}")
+        self.setWindowTitle(f"{APP_NAME} - {os.path.basename(path)}")
         self.reset_ab()
         # US8: プレイリストパネルの現在ファイルハイライト更新
         if hasattr(self, "playlist_panel"):
