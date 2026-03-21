@@ -18,6 +18,8 @@ def player(qtbot: QtBot, tmp_path: Path) -> VideoPlayer:
     qtbot.addWidget(widget)
     yield widget
     widget.timer.stop()
+
+    widget._size_poll_timer.stop()
     widget.media_player.stop()
 
 
@@ -35,6 +37,8 @@ def player_with_geo(qtbot: QtBot, tmp_path: Path):
         qtbot.addWidget(widget)
         yield widget, settings_path
         widget.timer.stop()
+
+        widget._size_poll_timer.stop()
         widget.media_player.stop()
 
 
@@ -63,6 +67,8 @@ class TestWindowGeometryRestore:
                 assert geo.height() >= 600
             finally:
                 widget.timer.stop()
+
+                widget._size_poll_timer.stop()
                 widget.media_player.stop()
 
 
@@ -132,6 +138,8 @@ class TestWindowGeometryReset:
             widget._reset_window_geometry()
             assert widget._app_settings.window_geometry is None
             widget.timer.stop()
+
+            widget._size_poll_timer.stop()
             widget.media_player.stop()
 
 

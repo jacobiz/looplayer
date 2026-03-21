@@ -19,6 +19,8 @@ def player(qtbot: QtBot, store, tmp_path):
     qtbot.addWidget(w)
     yield w
     w.timer.stop()
+
+    w._size_poll_timer.stop()
     w.media_player.stop()
 
 

@@ -21,6 +21,8 @@ def player(qtbot: QtBot, tmp_path: Path) -> VideoPlayer:
     widget.show()
     yield widget
     widget.timer.stop()
+
+    widget._size_poll_timer.stop()
     widget.media_player.stop()
 
 

@@ -61,6 +61,7 @@ class VideoPlayer(QMainWindow):
         self.media_player = self.instance.media_player_new()
         self._current_video_path: str | None = None
         self._external_subtitle_path: Path | None = None
+        self._is_audio: bool = False
 
         # FR-015: ファイルが開けない場合のエラーイベント購読
         self._error_occurred.connect(self._show_error_dialog)
@@ -173,6 +174,14 @@ class VideoPlayer(QMainWindow):
         self.video_frame.setStyleSheet("background-color: black;")
         self.video_frame.setMinimumHeight(400)
         layout.addWidget(self.video_frame, stretch=1)
+
+        # 音楽再生中プレースホルダー（video_frame の子ウィジェットとしてオーバーレイ）
+        self._audio_placeholder = QLabel("♫", self.video_frame)
+        self._audio_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._audio_placeholder.setStyleSheet(
+            "background-color: black; color: #888888; font-size: 64px;"
+        )
+        self._audio_placeholder.hide()
 
         # コントロール群コンテナ（フルスクリーン時に一括 hide/show）
         self.controls_panel = QWidget()
@@ -618,7 +627,7 @@ class VideoPlayer(QMainWindow):
             self,
             t("dialog.open_video.title"),
             "",
-            t("filter.video_file"),
+            t("filter.media_file"),
         )
         if not path:
             return
@@ -647,6 +656,9 @@ class VideoPlayer(QMainWindow):
         path = os.path.normpath(path)
         self._current_video_path = path
         self._external_subtitle_path = None
+        # 音楽ファイル判定（拡張子ベース）とプレースホルダー表示更新
+        self._is_audio = Path(path).suffix.lower() in self._SUPPORTED_AUDIO_EXTENSIONS
+        self._update_audio_placeholder()
         media = self.instance.media_new(path)
         # F-203: ミラー表示が有効な場合、VLC の hflip フィルタを適用する
         if self._app_settings.mirror_display:
@@ -688,19 +700,20 @@ class VideoPlayer(QMainWindow):
         self._recent.add(path)
         self._rebuild_recent_menu()
 
-        # US3: 動画変更シグナルを emit してポーリング開始
-        self._video_changed.emit()
+        # US3: 動画変更シグナルを emit してポーリング開始（音楽ファイルは映像なし）
+        if not self._is_audio:
+            self._video_changed.emit()
 
         # US6: 動画を開いたらエクスポートを有効化
         self._export_action.setEnabled(True)
 
-        # US3: 動画を開いたら動画情報・スクリーンショットを有効化
-        self._video_info_action.setEnabled(True)
-        self._screenshot_action.setEnabled(True)
+        # US3: 動画を開いたら動画情報・スクリーンショットを有効化（音楽ファイルは無効）
+        self._video_info_action.setEnabled(not self._is_audio)
+        self._screenshot_action.setEnabled(not self._is_audio)
 
-        # US2: 音声・字幕トラックメニューを有効化（内容は aboutToShow で更新）
+        # US2: 音声トラックメニューを有効化（音楽でも有効）、字幕は動画のみ
         self._audio_track_menu.setEnabled(True)
-        self._subtitle_menu.setEnabled(True)
+        self._subtitle_menu.setEnabled(not self._is_audio)
 
         # US1: タイムラインバーを更新
         self._sync_slider_bookmarks()
@@ -776,7 +789,7 @@ class VideoPlayer(QMainWindow):
             self,
             t("menu.file.export_clip"),
             str(source.parent / default_name),
-            t("filter.video_file_ext").format(ext=suffix),
+            t("filter.audio_file_ext" if self._is_audio else "filter.video_file_ext").format(ext=suffix),
         )
         if not out_path:
             return
@@ -885,7 +898,11 @@ class VideoPlayer(QMainWindow):
         """50ms ごとに動画サイズを確認し、非ゼロになったらリサイズしてタイマーを停止。
         100 回（5秒）経過しても動画サイズが取得できない場合はタイマーを強制停止する。
         """
-        w, h = self.media_player.video_get_size()
+        try:
+            w, h = self.media_player.video_get_size()
+        except Exception:
+            self._size_poll_timer.stop()
+            return
         if w and h:
             self._size_poll_timer.stop()
             self._resize_to_video(w, h)
@@ -916,6 +933,15 @@ class VideoPlayer(QMainWindow):
         finally:
             self._auto_resizing = False
 
+    def _update_audio_placeholder(self) -> None:
+        """音楽ファイル再生中プレースホルダーの表示状態を _is_audio に合わせて更新する。"""
+        if self._is_audio:
+            self._audio_placeholder.setGeometry(self.video_frame.rect())
+            self._audio_placeholder.show()
+            self._audio_placeholder.raise_()
+        else:
+            self._audio_placeholder.hide()
+
     def resizeEvent(self, event) -> None:
         """ユーザー手動リサイズ時にポーリングタイマーを停止する（自動リサイズ時は無視）。"""
         if not self._auto_resizing and self._size_poll_timer.isActive():
@@ -923,9 +949,17 @@ class VideoPlayer(QMainWindow):
         # F-501: オンボーディングオーバーレイを中央追従させる
         if self._onboarding_overlay is not None and not self._onboarding_overlay.isHidden():
             self._onboarding_overlay._reposition(self)
+        # 音楽再生中プレースホルダーのジオメトリを更新する
+        self._update_audio_placeholder()
         super().resizeEvent(event)
 
-    _SUPPORTED_EXTENSIONS = {".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v"}
+    _SUPPORTED_VIDEO_EXTENSIONS = frozenset({
+        ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v",
+    })
+    _SUPPORTED_AUDIO_EXTENSIONS = frozenset({
+        ".mp3", ".flac", ".aac", ".wav", ".ogg", ".m4a", ".opus",
+    })
+    _SUPPORTED_EXTENSIONS = _SUPPORTED_VIDEO_EXTENSIONS | _SUPPORTED_AUDIO_EXTENSIONS
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         """US1: URL を含む DragEnter イベントを受け付ける。"""
@@ -959,7 +993,7 @@ class VideoPlayer(QMainWindow):
             if not p.name.startswith('.') and p.suffix.lower() in self._SUPPORTED_EXTENSIONS
         )
         if not files:
-            QMessageBox.warning(self, t("msg.no_video_file.title"), t("msg.no_video_file.body"))
+            QMessageBox.warning(self, t("msg.no_media_file.title"), t("msg.no_media_file.body"))
             return
         if len(files) == 1:
             self._playlist = None
