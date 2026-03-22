@@ -2,15 +2,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from PyQt6.QtWidgets import QApplication
-
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
 from looplayer.i18n import t
-
-
-@pytest.fixture(scope="session")
-def qapp():
-    return QApplication.instance() or QApplication([])
 
 
 VIDEO = "/test/video.mp4"

@@ -2,16 +2,11 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from PyQt6.QtWidgets import QApplication, QMenu
+from PyQt6.QtWidgets import QMenu
 from PyQt6.QtCore import QPoint
 
 from looplayer.bookmark_store import LoopBookmark
 from looplayer.i18n import t
-
-
-@pytest.fixture(scope="session")
-def qapp():
-    return QApplication.instance() or QApplication([])
 
 
 def make_bookmark(point_a_ms=1000, point_b_ms=2000, name="Test BM"):
@@ -134,19 +129,14 @@ class TestBookmarkRowContextMenuSignals:
         assert received == [bm.id]
 
 
-class TestBookmarkRowExportClipDisabled:
-    def test_export_clip_disabled_when_ab_not_set(self, qapp):
-        """A/B 未設定時に「クリップを書き出す」が disabled であること。"""
+class TestBookmarkRowExportClip:
+    def test_export_clip_enabled_for_valid_bookmark(self, qapp):
+        """有効な A/B 設定時に「クリップを書き出す」が enabled であること。"""
         from looplayer.widgets.bookmark_row import BookmarkRow
-        # A point >= B point to make it invalid
-        bm = LoopBookmark(point_a_ms=2000, point_b_ms=1000, name="bad")
-        # Bypass __post_init__ validation by using a valid bm but checking via canExport
-        bm2 = make_bookmark()  # valid bm
-        row = BookmarkRow(bm2)
+        bm = make_bookmark()  # valid bm with a < b
+        row = BookmarkRow(bm)
 
         actions, _ = collect_menu_actions(row)
-        # The export clip action text
         export_key = t("bookmark.row.export_clip")
         assert export_key in actions
-        # The action should be enabled since bm2 has valid a/b
         assert actions[export_key].isEnabled()

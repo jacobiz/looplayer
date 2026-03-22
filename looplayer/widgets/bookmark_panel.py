@@ -1,4 +1,7 @@
 """BookmarkPanel: ブックマーク一覧パネルウィジェット。"""
+import uuid
+from dataclasses import replace as dc_replace
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QToolButton,
     QListWidget, QListWidgetItem, QAbstractItemView, QInputDialog, QMenu,
@@ -380,11 +383,9 @@ class BookmarkPanel(QWidget):
         bm = next((b for b in bms if b.id == bookmark_id), None)
         if bm is None:
             return
-        import uuid as _uuid
-        from dataclasses import replace as _dc_replace
-        new_bm = _dc_replace(
+        new_bm = dc_replace(
             bm,
-            id=str(_uuid.uuid4()),
+            id=str(uuid.uuid4()),
             name=bm.name + t("bookmark.copy_suffix"),
             play_count=0,
         )

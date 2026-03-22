@@ -1654,7 +1654,7 @@ class VideoPlayer(QMainWindow):
 
         add_bookmark_action = QAction(t("ctx.add_bookmark"), self)
         ab_both_set = (self.ab_point_a is not None and self.ab_point_b is not None)
-        add_bookmark_action.setEnabled(ab_both_set)
+        add_bookmark_action.setEnabled(has_media and ab_both_set)
         add_bookmark_action.triggered.connect(self._save_bookmark)
         menu.addAction(add_bookmark_action)
 
