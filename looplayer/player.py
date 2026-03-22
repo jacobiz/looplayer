@@ -285,6 +285,9 @@ class VideoPlayer(QMainWindow):
         self.bookmark_panel.play_count_reset.connect(self._on_play_count_reset)  # US6
         self.bookmark_panel.tags_changed.connect(self._on_tags_changed)  # US9
         self.bookmark_panel.seq_mode_toggled.connect(self._on_seq_mode_toggled)  # US5
+        self.bookmark_panel.seek_to_ms_requested.connect(self._on_seek_to_ms)  # 022
+        self.bookmark_panel.import_requested.connect(self._import_bookmarks)  # 022
+        self.bookmark_panel.export_from_panel_requested.connect(self._export_bookmarks)  # 022
 
         self.playlist_panel = PlaylistPanel()
         self.playlist_panel.file_requested.connect(self._open_path)  # US8
@@ -307,6 +310,23 @@ class VideoPlayer(QMainWindow):
 
         # ステータスバー初期化（スクリーンショット通知・速度フィードバック等で使用）
         self.statusBar()
+
+        # 022: 動画エリア右クリックオーバーレイ
+        self._build_video_context_overlay()
+
+    def _build_video_context_overlay(self) -> None:
+        """動画エリアの右クリックを受け取るための透明オーバーレイ QWidget を生成する（022）。
+
+        VLC が video_frame のネイティブウィンドウを占有するため、
+        透明な子ウィジェットで右クリックイベントを受信する。
+        """
+        from PyQt6.QtWidgets import QWidget as _QWidget
+        self._video_ctx_overlay = _QWidget(self.video_frame)
+        self._video_ctx_overlay.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._video_ctx_overlay.resize(self.video_frame.size())
+        self._video_ctx_overlay.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._video_ctx_overlay.customContextMenuRequested.connect(self._show_video_context_menu)
+        self._video_ctx_overlay.raise_()
 
     def _build_menus(self):
         """メニューバーを構築する（T005/T006/T007/T013/T015/T017/T019）。"""
@@ -975,6 +995,9 @@ class VideoPlayer(QMainWindow):
             self._onboarding_overlay._reposition(self)
         # 音楽再生中プレースホルダーのジオメトリを更新する
         self._update_audio_placeholder()
+        # 022: 動画エリア右クリックオーバーレイを video_frame に追従させる
+        if hasattr(self, "_video_ctx_overlay"):
+            self._video_ctx_overlay.resize(self.video_frame.size())
         super().resizeEvent(event)
 
     _SUPPORTED_VIDEO_EXTENSIONS = frozenset({
@@ -1598,6 +1621,56 @@ class VideoPlayer(QMainWindow):
                 self._cursor_hide_timer.start()
         super().mouseMoveEvent(event)
 
+    # ── 動画エリア右クリックメニュー（022）────────────────────────────────
+
+    def _show_video_context_menu(self, pos: QPoint) -> None:
+        """動画エリアの右クリックコンテキストメニューを表示する（022）。"""
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self)
+
+        has_media = getattr(self, "_current_video_path", None) is not None
+
+        play_pause_action = QAction(t("ctx.play_pause"), self)
+        play_pause_action.setEnabled(has_media)
+        play_pause_action.triggered.connect(self.toggle_play)
+        menu.addAction(play_pause_action)
+
+        stop_action = QAction(t("ctx.stop"), self)
+        stop_action.setEnabled(has_media)
+        stop_action.triggered.connect(self.stop)
+        menu.addAction(stop_action)
+
+        menu.addSeparator()
+
+        set_a_action = QAction(t("ctx.set_a"), self)
+        set_a_action.setEnabled(has_media)
+        set_a_action.triggered.connect(self.set_point_a)
+        menu.addAction(set_a_action)
+
+        set_b_action = QAction(t("ctx.set_b"), self)
+        set_b_action.setEnabled(has_media)
+        set_b_action.triggered.connect(self.set_point_b)
+        menu.addAction(set_b_action)
+
+        add_bookmark_action = QAction(t("ctx.add_bookmark"), self)
+        ab_both_set = (self.ab_point_a is not None and self.ab_point_b is not None)
+        add_bookmark_action.setEnabled(has_media and ab_both_set)
+        add_bookmark_action.triggered.connect(self._save_bookmark)
+        menu.addAction(add_bookmark_action)
+
+        menu.addSeparator()
+
+        screenshot_action = QAction(t("ctx.screenshot"), self)
+        screenshot_action.setEnabled(self._screenshot_action.isEnabled())
+        screenshot_action.triggered.connect(self._take_screenshot)
+        menu.addAction(screenshot_action)
+
+        fullscreen_action = QAction(t("ctx.fullscreen"), self)
+        fullscreen_action.triggered.connect(self.toggle_fullscreen)
+        menu.addAction(fullscreen_action)
+
+        menu.exec(self._video_ctx_overlay.mapToGlobal(pos))
+
     # ── 常に最前面操作 ────────────────────────────────────────
 
     def _toggle_mirror_display(self):
@@ -1912,6 +1985,10 @@ class VideoPlayer(QMainWindow):
             self._seq_state.one_round_mode = one_round
         self.bookmark_panel.set_one_round_mode(one_round)
         self._app_settings.sequential_play_mode = "one_round" if one_round else "infinite"
+
+    def _on_seek_to_ms(self, ms: int) -> None:
+        """A点へジャンプ: 再生状態を変えずにシークする（022）。"""
+        self.media_player.set_time(ms)
 
     def _stop_seq_play(self) -> None:
         """US5: 連続再生を停止する（on_b_reached が None を返したとき）。"""
