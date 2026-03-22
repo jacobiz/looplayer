@@ -77,6 +77,7 @@ pytest tests/unit/ -v   # ユニットテストのみ
 - `~/.looplayer/bookmarks.json`, `positions.json`, `recent_files.json`（既存、変更なし） (020-music-playback)
 - `~/.looplayer/settings.json`（AppSettings — 既存ファイルに 2 フィールド追加） (021-bookmark-sidepanel)
 - `~/.looplayer/bookmarks.json`（BookmarkStore 経由、変更なし） (022-enhance-context-menu)
+- N/A（UI 変更のみ、データファイル変更なし） (023-button-icons)
 
 ## Recent Changes
 - 012-player-improvements: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203、ffmpeg（US10 のトランスコード用、既存）
