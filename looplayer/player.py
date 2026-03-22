@@ -11,7 +11,7 @@ if getattr(sys, 'frozen', False):
         os.environ['VLC_PLUGIN_PATH'] = _vlc_plugins
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QSlider, QLabel, QFileDialog, QMessageBox,
+    QPushButton, QSlider, QLabel, QFileDialog, QMessageBox, QSplitter,
 )
 from PyQt6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QDragEnterEvent, QDropEvent
 from PyQt6.QtCore import Qt, QTimer, QPoint, pyqtSignal
@@ -173,7 +173,6 @@ class VideoPlayer(QMainWindow):
         self.video_frame = QWidget()
         self.video_frame.setStyleSheet("background-color: black;")
         self.video_frame.setMinimumHeight(400)
-        layout.addWidget(self.video_frame, stretch=1)
 
         # 音楽再生中プレースホルダー（video_frame の子ウィジェットとしてオーバーレイ）
         self._audio_placeholder = QLabel("♫", self.video_frame)
@@ -293,7 +292,18 @@ class VideoPlayer(QMainWindow):
         self._panel_tabs.addTab(self.bookmark_panel, t("tab.bookmarks"))
         self._playlist_tab_index = self._panel_tabs.addTab(self.playlist_panel, t("tab.playlist"))
         self._panel_tabs.setTabVisible(self._playlist_tab_index, False)
-        controls_layout.addWidget(self._panel_tabs)
+
+        # QSplitter で動画とパネルを横並びに（021: ブックマークサイドパネル）
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter.setChildrenCollapsible(False)
+        self._splitter.addWidget(self.video_frame)
+        self._panel_tabs.setMinimumWidth(240)
+        self._splitter.addWidget(self._panel_tabs)
+        self.video_frame.setMinimumWidth(320)
+        layout.insertWidget(0, self._splitter, stretch=1)
+
+        # 初期サイズを AppSettings から遅延復元
+        QTimer.singleShot(0, self._apply_initial_panel_width)
 
         # ステータスバー初期化（スクリーンショット通知・速度フィードバック等で使用）
         self.statusBar()
@@ -512,6 +522,15 @@ class VideoPlayer(QMainWindow):
         self.mirror_action.setChecked(self._app_settings.mirror_display)
         self.mirror_action.triggered.connect(self._toggle_mirror_display)
         view_menu.addAction(self.mirror_action)
+
+        # 021: ブックマークパネル表示切り替え（B キー）
+        self._bookmark_panel_action = QAction(t("menu.view.bookmark_panel"), self)
+        self._bookmark_panel_action.setCheckable(True)
+        self._bookmark_panel_action.setChecked(self._app_settings.bookmark_panel_visible)
+        self._bookmark_panel_action.setShortcut(QKeySequence("B"))
+        self._bookmark_panel_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._bookmark_panel_action.triggered.connect(self._toggle_bookmark_panel)
+        view_menu.addAction(self._bookmark_panel_action)
 
         # US5: ブックマーク削除 Undo (Ctrl+Z)
         undo_action = QAction(t("action.undo"), self)
@@ -923,8 +942,13 @@ class VideoPlayer(QMainWindow):
             max_w, max_h = 1920, 1080
         # タイトルバー＋コントロール分の高さを加算してウィンドウサイズを求める
         ui_h_offset = self.height() - self.video_frame.height()
-        # 幅方向は video_frame.width() == window.width() のため補正不要
-        target_w = max(800, min(w, max_w))
+        # 幅方向: パネルが表示中の場合はパネル幅を加算する（021）
+        panel_w = (
+            self._splitter.sizes()[1]
+            if hasattr(self, "_splitter") and not self._panel_tabs.isHidden()
+            else 0
+        )
+        target_w = max(800, min(w + panel_w, max_w))
         target_h = max(600, min(h + ui_h_offset, max_h))
         # 自動リサイズ中フラグを立てて resizeEvent が誤ってタイマーを止めないようにする
         self._auto_resizing = True
@@ -1506,6 +1530,9 @@ class VideoPlayer(QMainWindow):
 
     def _enter_fullscreen_overlay_mode(self) -> None:
         """controls_panel をレイアウトから外してフローティングオーバーレイに切り替える。"""
+        # 021: フルスクリーン前のパネル表示状態を保存して非表示にする
+        self._panel_tabs_was_visible = not self._panel_tabs.isHidden()
+        self._panel_tabs.hide()
         layout = self.centralWidget().layout()
         layout.removeWidget(self.controls_panel)
         self.controls_panel.setParent(self)
@@ -1520,6 +1547,12 @@ class VideoPlayer(QMainWindow):
         layout = self.centralWidget().layout()
         layout.addWidget(self.controls_panel)
         self.controls_panel.show()
+        # 021: フルスクリーン前の表示状態を復元する
+        if getattr(self, "_panel_tabs_was_visible", False):
+            self._panel_tabs.show()
+            total = self._splitter.width()
+            w = self._clamp_panel_width(total)
+            self._splitter.setSizes([total - w, w])
 
     def _reposition_overlay(self) -> None:
         """controls_panel のオーバーレイ位置（画面下端）を計算してセットする。"""
@@ -1593,6 +1626,40 @@ class VideoPlayer(QMainWindow):
                     t("btn.ab_loop_on") if saved_loop else t("btn.ab_loop_off")
                 )
             QTimer.singleShot(300, _restore)
+
+    # ── ブックマークサイドパネル操作（021） ───────────────────────────────
+
+    def _clamp_panel_width(self, total: int) -> int:
+        """保存済みパネル幅をウィンドウ幅に合わせてクランプして返す。"""
+        w = min(self._app_settings.bookmark_panel_width, total - 320)
+        return max(w, 240)
+
+    def _apply_initial_panel_width(self) -> None:
+        """起動時に AppSettings からパネル幅・表示状態を復元する（QTimer.singleShot 経由）。"""
+        total = self._splitter.width()
+        visible = self._app_settings.bookmark_panel_visible
+        if not visible:
+            self._panel_tabs.hide()
+        else:
+            w = self._clamp_panel_width(total)
+            self._splitter.setSizes([total - w, w])
+        self._bookmark_panel_action.setChecked(visible)
+
+    def _toggle_bookmark_panel(self) -> None:
+        """ブックマークパネルの表示・非表示を切り替える。"""
+        visible = self._panel_tabs.isHidden()  # 隠れている → 表示に切り替える
+        if visible:
+            self._panel_tabs.show()
+            total = self._splitter.width()
+            w = self._clamp_panel_width(total)
+            self._splitter.setSizes([total - w, w])
+        else:
+            sizes = self._splitter.sizes()
+            if len(sizes) >= 2 and sizes[1] > 0:
+                self._app_settings.bookmark_panel_width = sizes[1]
+            self._panel_tabs.hide()
+        self._app_settings.bookmark_panel_visible = visible
+        self._bookmark_panel_action.setChecked(visible)
 
     def _toggle_always_on_top(self):
         """常に最前面フラグをトグルする。"""
@@ -2105,8 +2172,13 @@ class VideoPlayer(QMainWindow):
         # "stop" は VLC が自動的に停止するため何もしない
 
     def closeEvent(self, event):
-        """US5: アプリ終了時に現在の再生位置を保存する。F-403: ウィンドウジオメトリを保存する。"""
+        """US5: アプリ終了時に現在の再生位置を保存する。F-403: ウィンドウジオメトリを保存する。021: パネル幅を保存する。"""
         self.timer.stop()
+        # 021: パネルが表示中なら幅を保存する
+        if self._panel_tabs.isVisible():
+            sizes = self._splitter.sizes()
+            if len(sizes) >= 2 and sizes[1] > 0:
+                self._app_settings.bookmark_panel_width = sizes[1]
         if self._current_video_path:
             self._playback_position.save(
                 self._current_video_path,
