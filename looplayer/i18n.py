@@ -175,7 +175,11 @@ _STRINGS: dict[str, dict[str, str]] = {
     # F-403: ウィンドウ位置・サイズの記憶
     "menu.view.reset_window":           {"ja": "ウィンドウ位置をリセット",        "en": "Reset Window Position"},
     # F-502: ツールチップ
+    "tooltip.btn.open":                 {"ja": "ファイルを開く",                  "en": "Open file"},
+    "tooltip.btn.stop":                 {"ja": "停止",                           "en": "Stop"},
     "tooltip.btn.play":                 {"ja": "再生/一時停止 (Space)",           "en": "Play/Pause (Space)"},
+    "tooltip.btn.ab_reset":             {"ja": "ABポイントをリセット",            "en": "Reset AB points"},
+    "tooltip.btn.save_bookmark":        {"ja": "ブックマークを保存",              "en": "Save bookmark"},
     "tooltip.seekbar":                  {"ja": "クリックまたはドラッグで再生位置を変更", "en": "Click or drag to seek"},
     "tooltip.volume":                   {"ja": "音量を調整 (↑/↓)",               "en": "Adjust volume (↑/↓)"},
     "tooltip.btn.frame_minus":          {"ja": "1フレーム戻す (,)",               "en": "Go back 1 frame (,)"},
