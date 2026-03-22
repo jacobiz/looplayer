@@ -133,3 +133,23 @@ class AppSettings:
             raise TypeError(f"mirror_display は bool でなければなりません。受け取った型: {type(value).__name__!r}")
         self._data["mirror_display"] = value
         self.save()
+
+    @property
+    def bookmark_panel_visible(self) -> bool:
+        """ブックマークパネルの表示状態。デフォルト False（非表示）。"""
+        return bool(self._data.get("bookmark_panel_visible", False))
+
+    @bookmark_panel_visible.setter
+    def bookmark_panel_visible(self, value: bool) -> None:
+        self._data["bookmark_panel_visible"] = value
+        self.save()
+
+    @property
+    def bookmark_panel_width(self) -> int:
+        """ブックマークパネルの幅（px）。デフォルト 280px、最小 240px。"""
+        return int(self._data.get("bookmark_panel_width", 280))
+
+    @bookmark_panel_width.setter
+    def bookmark_panel_width(self, value: int) -> None:
+        self._data["bookmark_panel_width"] = max(240, value)
+        self.save()
