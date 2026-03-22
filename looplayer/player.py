@@ -12,6 +12,7 @@ if getattr(sys, 'frozen', False):
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QSlider, QLabel, QFileDialog, QMessageBox, QSplitter,
+    QStyle,
 )
 from PyQt6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QDragEnterEvent, QDropEvent
 from PyQt6.QtCore import Qt, QTimer, QPoint, pyqtSignal
@@ -270,6 +271,27 @@ class VideoPlayer(QMainWindow):
         bookmark_save_layout.addWidget(self.save_bookmark_btn)
         bookmark_save_layout.addStretch()
         controls_layout.addLayout(bookmark_save_layout)
+
+        # ── アイコン・ツールチップ設定（023-button-icons） ──────────────────────
+        # play_btn: 初期状態（メディア未ロード）→ 再生アイコン + disabled（FR-001）
+        self.play_btn.setEnabled(False)
+        self._update_play_btn_appearance(playing=False)
+        # P1: 主要再生ボタン
+        self._apply_btn_icon(self.open_btn, QStyle.StandardPixmap.SP_DirOpenIcon)
+        self._apply_btn_icon(self.stop_btn, QStyle.StandardPixmap.SP_MediaStop)
+        # P2: ABループボタン
+        self._apply_btn_icon(self.set_a_btn, QStyle.StandardPixmap.SP_MediaSeekBackward)
+        self._apply_btn_icon(self.set_b_btn, QStyle.StandardPixmap.SP_MediaSeekForward)
+        self._apply_btn_icon(self.ab_toggle_btn, QStyle.StandardPixmap.SP_BrowserReload)
+        self._apply_btn_icon(self.ab_reset_btn, QStyle.StandardPixmap.SP_DialogResetButton)
+        # P3: その他ボタン
+        self._apply_btn_icon(self.save_bookmark_btn, QStyle.StandardPixmap.SP_FileDialogStart)
+        self._apply_btn_icon(self._zoom_btn, QStyle.StandardPixmap.SP_FileDialogContentsView)
+        # 不足ツールチップ追加（FR-010: 023-button-icons）
+        self.open_btn.setToolTip(t("tooltip.btn.open"))
+        self.stop_btn.setToolTip(t("tooltip.btn.stop"))
+        self.ab_reset_btn.setToolTip(t("tooltip.btn.ab_reset"))
+        self.save_bookmark_btn.setToolTip(t("tooltip.btn.save_bookmark"))
 
         # ブックマークパネル + プレイリストパネル（US8: QTabWidget で切り替え）
         from PyQt6.QtWidgets import QTabWidget
@@ -714,7 +736,8 @@ class VideoPlayer(QMainWindow):
             self.media_player.set_xwindow(win_id)
 
         self.media_player.play()
-        self.play_btn.setText(t("btn.pause"))
+        self.play_btn.setEnabled(True)
+        self._update_play_btn_appearance(playing=True)
         self.setWindowTitle(f"{APP_NAME} - {os.path.basename(path)}")
         self.reset_ab()
         # US8: プレイリストパネルの現在ファイルハイライト更新
@@ -1064,14 +1087,14 @@ class VideoPlayer(QMainWindow):
             return
         if self.media_player.is_playing():
             self.media_player.pause()
-            self.play_btn.setText(t("btn.play"))
+            self._update_play_btn_appearance(playing=False)
         else:
             self.media_player.play()
-            self.play_btn.setText(t("btn.pause"))
+            self._update_play_btn_appearance(playing=True)
 
     def stop(self):
         self.media_player.stop()
-        self.play_btn.setText(t("btn.play"))
+        self._update_play_btn_appearance(playing=False)
         self.seek_slider.setValue(0)
         self.time_label.setText("00:00 / 00:00")
 
@@ -1815,6 +1838,21 @@ class VideoPlayer(QMainWindow):
         b_str = ms_to_str(self.ab_point_b) if self.ab_point_b is not None else "--"
         self.ab_info_label.setText(f"A: {a_str}  B: {b_str}")
 
+    def _apply_btn_icon(self, btn: QPushButton, sp: QStyle.StandardPixmap) -> None:
+        """QStyle 標準アイコンを設定する。isNull() ならフォールバック（FR-009）。"""
+        icon = self.style().standardIcon(sp)
+        if not icon.isNull():
+            btn.setIcon(icon)
+
+    def _update_play_btn_appearance(self, playing: bool) -> None:
+        """FR-001: 再生状態に応じて play_btn のアイコンとテキストを更新する。"""
+        if playing:
+            self._apply_btn_icon(self.play_btn, QStyle.StandardPixmap.SP_MediaPause)
+            self.play_btn.setText(t("btn.pause"))
+        else:
+            self._apply_btn_icon(self.play_btn, QStyle.StandardPixmap.SP_MediaPlay)
+            self.play_btn.setText(t("btn.play"))
+
     def _update_save_btn_state(self):
         """FR-001: A・B点が両方設定済み時のみ保存ボタンとズームボタンを有効化。"""
         enabled = self.ab_point_a is not None and self.ab_point_b is not None
@@ -1900,7 +1938,7 @@ class VideoPlayer(QMainWindow):
         self.media_player.set_time(bookmark.point_a_ms)
         if not self.media_player.is_playing():
             self.media_player.play()
-            self.play_btn.setText(t("btn.pause"))
+            self._update_play_btn_appearance(playing=True)
         self._sync_slider_bookmarks()
 
     # ── 連続再生操作 ──────────────────────────────────────────
@@ -1916,7 +1954,7 @@ class VideoPlayer(QMainWindow):
         self.media_player.set_time(state.current_bookmark.point_a_ms)
         if not self.media_player.is_playing():
             self.media_player.play()
-            self.play_btn.setText(t("btn.pause"))
+            self._update_play_btn_appearance(playing=True)
         self._sync_slider_bookmarks()
 
     def _on_sequential_stopped(self):
@@ -1959,7 +1997,7 @@ class VideoPlayer(QMainWindow):
         self._pause_timer = None
         self.media_player.set_time(a_ms)
         self.media_player.play()
-        self.play_btn.setText(t("btn.pause"))
+        self._update_play_btn_appearance(playing=True)
 
     def _on_pause_ms_changed(self, bm_id: str, pause_ms: int) -> None:
         """US4: pause_ms_changed シグナルを bookmark_panel 経由で受信（BookmarkPanel が永続化済み）。"""
@@ -2243,9 +2281,11 @@ class VideoPlayer(QMainWindow):
             self.media_player.set_time(0)
             self.seek_slider.setValue(0)
             self.time_label.setText("00:00 / 00:00")
+            self._update_play_btn_appearance(playing=False)
         elif action == "loop":
             self.media_player.stop()
             self.media_player.play()
+            self._update_play_btn_appearance(playing=True)
         # "stop" は VLC が自動的に停止するため何もしない
 
     def closeEvent(self, event):
