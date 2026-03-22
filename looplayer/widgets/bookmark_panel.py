@@ -1,8 +1,9 @@
 """BookmarkPanel: ブックマーク一覧パネルウィジェット。"""
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QToolButton,
-    QListWidget, QListWidgetItem, QAbstractItemView, QInputDialog,
+    QListWidget, QListWidgetItem, QAbstractItemView, QInputDialog, QMenu,
 )
+from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from looplayer.bookmark_store import BookmarkStore, LoopBookmark
@@ -22,6 +23,9 @@ class BookmarkPanel(QWidget):
     play_count_reset = pyqtSignal(str)              # bm_id（US6）
     tags_changed = pyqtSignal(str, list)            # bm_id, tags（US9）
     seq_mode_toggled = pyqtSignal(bool)             # one_round（US5）
+    seek_to_ms_requested = pyqtSignal(int)          # ms（022）
+    import_requested = pyqtSignal()                 # パネル空白エリアからのインポート要求（022）
+    export_from_panel_requested = pyqtSignal()      # パネル空白エリアからのエクスポート要求（022）
 
     def __init__(self, store: BookmarkStore, parent=None):
         super().__init__(parent)
@@ -79,6 +83,9 @@ class BookmarkPanel(QWidget):
         self.list_widget.setMinimumHeight(120)
         self.list_widget.itemClicked.connect(self._on_item_clicked)
         self.list_widget.model().rowsMoved.connect(self._on_rows_moved)
+        # 022: 空白エリアの右クリックメニュー
+        self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list_widget.customContextMenuRequested.connect(self._show_panel_context_menu)
         layout.addWidget(self.list_widget)
 
     # ── 公開メソッド ────────────────────────────────────────
@@ -141,6 +148,8 @@ class BookmarkPanel(QWidget):
             row.pause_ms_changed.connect(self._on_pause_ms_changed)  # US4
             row.play_count_reset.connect(self.play_count_reset)  # US6
             row.tags_changed.connect(self._on_tags_changed)  # US9
+            row.jump_to_a_requested.connect(self._on_jump_to_a)  # 022
+            row.duplicate_requested.connect(self._on_duplicate)  # 022
             item.setSizeHint(row.sizeHint())
             item.setData(Qt.ItemDataRole.UserRole, bm.id)
             self.list_widget.addItem(item)
@@ -351,6 +360,60 @@ class BookmarkPanel(QWidget):
             return
         self._store.update_tags(self._video_path, bookmark_id, tags)
         self._refresh_tag_filter_ui()
+
+    # ── 022: A点ジャンプ / 複製 / パネル空白エリアメニュー ────────────────────
+
+    def _on_jump_to_a(self, bookmark_id: str) -> None:
+        """A点へジャンプ: seek_to_ms_requested シグナルを emit する（022）。"""
+        if self._video_path is None:
+            return
+        bms = self._store.get_bookmarks(self._video_path)
+        bm = next((b for b in bms if b.id == bookmark_id), None)
+        if bm is not None:
+            self.seek_to_ms_requested.emit(bm.point_a_ms)
+
+    def _on_duplicate(self, bookmark_id: str) -> None:
+        """複製: insert_after() で直後に複製ブックマークを挿入する（022）。"""
+        if self._video_path is None:
+            return
+        bms = self._store.get_bookmarks(self._video_path)
+        bm = next((b for b in bms if b.id == bookmark_id), None)
+        if bm is None:
+            return
+        import uuid as _uuid
+        from dataclasses import replace as _dc_replace
+        new_bm = _dc_replace(
+            bm,
+            id=str(_uuid.uuid4()),
+            name=bm.name + t("bookmark.copy_suffix"),
+            play_count=0,
+        )
+        self._store.insert_after(self._video_path, new_bm, after_id=bookmark_id)
+        self._refresh_list()
+
+    def _show_panel_context_menu(self, pos) -> None:
+        """パネルの空白エリア右クリックメニューを表示する（022）。
+
+        行の上をクリックした場合は BookmarkRow のメニューが処理するため無視する。
+        """
+        if self.list_widget.itemAt(pos) is not None:
+            return
+        menu = QMenu(self)
+
+        import_action = QAction(t("ctx.import_bookmarks"), self)
+        import_action.triggered.connect(self.import_requested.emit)
+        menu.addAction(import_action)
+
+        export_action = QAction(t("ctx.export_bookmarks"), self)
+        has_bookmarks = (
+            self._video_path is not None
+            and bool(self._store.get_bookmarks(self._video_path))
+        )
+        export_action.setEnabled(has_bookmarks)
+        export_action.triggered.connect(self.export_from_panel_requested.emit)
+        menu.addAction(export_action)
+
+        menu.exec(self.list_widget.mapToGlobal(pos))
 
     def _refresh_tag_filter_ui(self) -> None:
         """US9: タグフィルタ UI を更新する。"""

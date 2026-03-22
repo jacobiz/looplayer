@@ -264,6 +264,26 @@ class BookmarkStore:
                 break
         self._save_all()
 
+    def insert_after(self, video_path: str, bookmark: LoopBookmark, after_id: str) -> None:
+        """指定 ID のブックマークの直後に新しいブックマークを挿入して永続化する。
+
+        after_id が見つからない場合は末尾に追加する（フォールバック）。
+        挿入後は全ブックマークの order を再採番する。
+        """
+        bms = self._data.get(video_path, [])
+        sorted_bms = sorted(bms, key=lambda b: b.order)
+        after_idx = next(
+            (i for i, b in enumerate(sorted_bms) if b.id == after_id),
+            len(sorted_bms) - 1
+        )
+        if not bookmark.name:
+            bookmark.name = f"ブックマーク {len(sorted_bms) + 1}"
+        sorted_bms.insert(after_idx + 1, bookmark)
+        for i, b in enumerate(sorted_bms):
+            b.order = i
+        self._data[video_path] = sorted_bms
+        self._save_all()
+
     def update_tags(self, video_path: str, bookmark_id: str, tags: list[str]) -> None:
         """タグを更新して永続化する（US9）。"""
         cleaned = [tag.strip() for tag in tags if tag.strip()]

@@ -328,6 +328,21 @@ _STRINGS: dict[str, dict[str, str]] = {
     # VLC 再生エラー
     "msg.media_error.title":            {"ja": "エラー",                              "en": "Error"},
     "msg.media_error.body":             {"ja": "メディアファイルを開けませんでした。",   "en": "Could not open the media file."},
+    # ── 022-enhance-context-menu ────────────────────────────────────────────────
+    "ctx.jump_to_a":        {"ja": "A点へジャンプ",              "en": "Jump to A Point"},
+    "ctx.rename":           {"ja": "名前を変更",                  "en": "Rename"},
+    "ctx.duplicate":        {"ja": "複製",                        "en": "Duplicate"},
+    "ctx.delete":           {"ja": "削除",                        "en": "Delete"},
+    "ctx.import_bookmarks": {"ja": "ブックマークをインポート",      "en": "Import Bookmarks"},
+    "ctx.export_bookmarks": {"ja": "ブックマークをエクスポート",    "en": "Export Bookmarks"},
+    "ctx.play_pause":       {"ja": "再生 / 一時停止",             "en": "Play / Pause"},
+    "ctx.stop":             {"ja": "停止",                        "en": "Stop"},
+    "ctx.set_a":            {"ja": "A点を設定",                   "en": "Set A Point"},
+    "ctx.set_b":            {"ja": "B点を設定",                   "en": "Set B Point"},
+    "ctx.add_bookmark":     {"ja": "ここにブックマークを追加",      "en": "Add Bookmark Here"},
+    "ctx.screenshot":       {"ja": "スクリーンショット",           "en": "Screenshot"},
+    "ctx.fullscreen":       {"ja": "フルスクリーン切り替え",       "en": "Toggle Fullscreen"},
+    "bookmark.copy_suffix": {"ja": "のコピー",                    "en": " Copy"},
 }
 
 # ── 公開 API ────────────────────────────────────────────────

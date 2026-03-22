@@ -24,6 +24,8 @@ class BookmarkRow(QWidget):
     pause_ms_changed = pyqtSignal(str, int)      # bookmark_id, pause_ms（US4）
     play_count_reset = pyqtSignal(str)           # bookmark_id（US6）
     tags_changed = pyqtSignal(str, list)         # bookmark_id, tags（US9）
+    jump_to_a_requested = pyqtSignal(str)        # bookmark_id（022）
+    duplicate_requested = pyqtSignal(str)        # bookmark_id（022）
 
     def __init__(self, bookmark: LoopBookmark, fps: float = _DEFAULT_FPS, parent=None):
         super().__init__(parent)
@@ -178,10 +180,43 @@ class BookmarkRow(QWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
 
+    def _start_rename(self) -> None:
+        """名前変更ダイアログを開く（コンテキストメニューとダブルクリックの共通処理）。"""
+        new_name, ok = QInputDialog.getText(
+            self, t("bookmark.name.edit_title"), t("bookmark.name.edit_prompt"),
+            text=self.name_label.text()
+        )
+        if ok and new_name.strip():
+            self.name_label.setText(new_name.strip())
+            self.name_changed.emit(self.bookmark_id, new_name.strip())
+
     def _show_context_menu(self, pos) -> None:
+        from PyQt6.QtGui import QAction as _QAction
         menu = QMenu(self)
+
+        jump_action = _QAction(t("ctx.jump_to_a"), self)
+        jump_action.triggered.connect(lambda: self.jump_to_a_requested.emit(self.bookmark_id))
+        menu.addAction(jump_action)
+
+        menu.addSeparator()
+
+        rename_action = _QAction(t("ctx.rename"), self)
+        rename_action.triggered.connect(self._start_rename)
+        menu.addAction(rename_action)
+
+        dup_action = _QAction(t("ctx.duplicate"), self)
+        dup_action.triggered.connect(lambda: self.duplicate_requested.emit(self.bookmark_id))
+        menu.addAction(dup_action)
+
+        del_action = _QAction(t("ctx.delete"), self)
+        del_action.triggered.connect(lambda: self.deleted.emit(self.bookmark_id))
+        menu.addAction(del_action)
+
+        menu.addSeparator()
+
         menu.addAction(self._export_clip_action)
         menu.addAction(self._reset_play_count_action)
+
         menu.exec(self.mapToGlobal(pos))
 
     def _on_export_clip(self) -> None:
@@ -241,12 +276,7 @@ class BookmarkRow(QWidget):
     def eventFilter(self, obj, event: QEvent) -> bool:
         """名前ラベルのダブルクリックを捕捉して編集ダイアログを開く（FR-004）。"""
         if obj is self.name_label and event.type() == QEvent.Type.MouseButtonDblClick:
-            new_name, ok = QInputDialog.getText(
-                self, t("bookmark.name.edit_title"), t("bookmark.name.edit_prompt"), text=self.name_label.text()
-            )
-            if ok and new_name.strip():
-                self.name_label.setText(new_name.strip())
-                self.name_changed.emit(self.bookmark_id, new_name.strip())
+            self._start_rename()
             return True
         return super().eventFilter(obj, event)
 
