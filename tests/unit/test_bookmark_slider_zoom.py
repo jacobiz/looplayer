@@ -140,3 +140,83 @@ class TestBookmarkSliderZoomPlayerIntegration:
             assert not player._zoom_btn.isEnabled()
             player.timer.stop()
             player.media_player.stop()
+
+
+# ── 024: set_position_ms テスト ──────────────────────────────────────────────
+
+@pytest.fixture
+def slider_pos(qtbot: QtBot) -> BookmarkSlider:
+    """本番環境と同じ range (0-1000) を使う set_position_ms 専用フィクスチャ。"""
+    s = BookmarkSlider(Qt.Orientation.Horizontal)
+    s.setMinimum(0)
+    s.setMaximum(1000)
+    s._duration_ms = 100000
+    qtbot.addWidget(s)
+    s.resize(800, 30)
+    return s
+
+
+class TestSetPositionMs:
+    """set_position_ms() のユニットテスト。"""
+
+    def test_zoom_active_position_in_range(self, slider_pos):
+        """ズームモード中、範囲内の中間位置が value == 500 にマップされる。"""
+        slider_pos.set_zoom(20000, 40000)
+        slider_pos.set_position_ms(30000)
+        assert slider_pos.value() == 500
+
+    def test_zoom_active_position_at_start(self, slider_pos):
+        """ズームモード中、zoom_start_ms → value == 0（左端）。"""
+        slider_pos.set_zoom(20000, 40000)
+        slider_pos.set_position_ms(20000)
+        assert slider_pos.value() == 0
+
+    def test_zoom_active_position_at_end(self, slider_pos):
+        """ズームモード中、zoom_end_ms → value == 1000（右端）。"""
+        slider_pos.set_zoom(20000, 40000)
+        slider_pos.set_position_ms(40000)
+        assert slider_pos.value() == 1000
+
+    def test_zoom_active_position_before_range(self, slider_pos):
+        """ズームモード中、範囲より前 → Qt が value を 0 にクリップ（左端固定）。"""
+        slider_pos.set_zoom(20000, 40000)
+        slider_pos.set_position_ms(10000)
+        assert slider_pos.value() == 0
+
+    def test_zoom_active_position_after_range(self, slider_pos):
+        """ズームモード中、範囲より後 → Qt が value を 1000 にクリップ（右端固定）。"""
+        slider_pos.set_zoom(20000, 40000)
+        slider_pos.set_position_ms(50000)
+        assert slider_pos.value() == 1000
+
+    def test_no_zoom_normal_mapping(self, slider_pos):
+        """ズームなし時、duration_ms の 50% → value == 500。"""
+        slider_pos.set_position_ms(50000)
+        assert slider_pos.value() == 500
+
+    def test_no_zoom_zero_duration(self, slider_pos):
+        """duration_ms == 0 の場合は value == 0（ゼロ除算安全）。"""
+        slider_pos._duration_ms = 0
+        slider_pos.set_position_ms(0)
+        assert slider_pos.value() == 0
+
+    # US2: ズーム範囲外での現在位置の認識
+
+    def test_zoom_before_range_fixed_to_left_end(self, slider_pos):
+        """ズーム範囲より前の現在位置 → マーカーが左端に固定（FR-004）。"""
+        slider_pos.set_zoom(30000, 60000)
+        slider_pos.set_position_ms(10000)  # ズーム開始より前
+        assert slider_pos.value() == 0
+
+    def test_zoom_after_range_fixed_to_right_end(self, slider_pos):
+        """ズーム範囲より後の現在位置 → マーカーが右端に固定（FR-004）。"""
+        slider_pos.set_zoom(30000, 60000)
+        slider_pos.set_position_ms(80000)  # ズーム終了より後
+        assert slider_pos.value() == slider_pos.maximum()
+
+    def test_zoom_duration_zero_with_zoom_enabled(self, slider_pos):
+        """duration_ms == 0 かつズーム有効時は ゼロ除算なし（ズームが優先）。"""
+        slider_pos._duration_ms = 0
+        slider_pos.set_zoom(1000, 2000)
+        slider_pos.set_position_ms(1500)  # ズーム範囲中央
+        assert slider_pos.value() == 500
