@@ -1121,7 +1121,7 @@ class VideoPlayer(QMainWindow):
         pos = self.media_player.get_position()
 
         if length_ms > 0 and not self.seek_slider.isSliderDown() and not self.seek_slider.is_track_dragging:
-            self.seek_slider.setValue(int(pos * 1000))
+            self.seek_slider.set_position_ms(int(pos * length_ms))
             self.time_label.setText(
                 f"{ms_to_str(int(pos * length_ms))} / {ms_to_str(length_ms)}"
             )

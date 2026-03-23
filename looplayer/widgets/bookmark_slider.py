@@ -77,6 +77,19 @@ class BookmarkSlider(QSlider):
         self._ab_preview_b = b_ms
         self.update()
 
+    def set_position_ms(self, current_ms: int) -> None:
+        """現在の再生位置（ms）をズームモードに応じた QSlider value に変換してセットする。
+        ズーム有効時は zoom_start〜zoom_end の相対割合に変換し、
+        範囲外は Qt の setValue クリップにより自動的に端固定となる（FR-004）。"""
+        if self._zoom_enabled and self._zoom_end_ms > self._zoom_start_ms:
+            zoom_range = self._zoom_end_ms - self._zoom_start_ms
+            value = int((current_ms - self._zoom_start_ms) / zoom_range * self.maximum())
+        elif self._duration_ms > 0:
+            value = int(current_ms / self._duration_ms * self.maximum())
+        else:
+            value = 0
+        self.setValue(value)
+
     def set_bookmarks(
         self,
         bookmarks: list[LoopBookmark],
