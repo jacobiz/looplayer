@@ -141,3 +141,32 @@ class TestWindowGeometry:
             from looplayer.app_settings import AppSettings
             s = AppSettings()
             assert s.window_geometry is None
+
+
+# ── 025: bookmark_panel_visible デフォルト値テスト ────────────────────────────
+
+class TestBookmarkPanelVisibleDefault:
+    def test_default_bookmark_panel_visible_is_true(self, tmp_path):
+        """設定ファイルにキーが存在しない場合、bookmark_panel_visible はデフォルト True。"""
+        with patch("looplayer.app_settings._SETTINGS_PATH", tmp_path / "settings.json"):
+            from looplayer.app_settings import AppSettings
+            s = AppSettings()
+            assert s.bookmark_panel_visible is True
+
+    def test_explicit_false_is_respected(self, tmp_path):
+        """設定ファイルに False が保存されていれば False を返す（既存設定を上書きしない）。"""
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"bookmark_panel_visible": False}))
+        with patch("looplayer.app_settings._SETTINGS_PATH", path):
+            from looplayer.app_settings import AppSettings
+            s = AppSettings()
+            assert s.bookmark_panel_visible is False
+
+    def test_explicit_true_is_respected(self, tmp_path):
+        """設定ファイルに True が保存されていれば True を返す。"""
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"bookmark_panel_visible": True}))
+        with patch("looplayer.app_settings._SETTINGS_PATH", path):
+            from looplayer.app_settings import AppSettings
+            s = AppSettings()
+            assert s.bookmark_panel_visible is True
