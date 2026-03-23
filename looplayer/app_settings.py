@@ -136,8 +136,8 @@ class AppSettings:
 
     @property
     def bookmark_panel_visible(self) -> bool:
-        """ブックマークパネルの表示状態。デフォルト False（非表示）。"""
-        return bool(self._data.get("bookmark_panel_visible", False))
+        """ブックマークパネルの表示状態。デフォルト True（表示）。"""
+        return bool(self._data.get("bookmark_panel_visible", True))
 
     @bookmark_panel_visible.setter
     def bookmark_panel_visible(self, value: bool) -> None:
