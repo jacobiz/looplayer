@@ -107,6 +107,9 @@ class VideoPlayer(QMainWindow):
         # B点到達後のシーク完了待ちクールダウン（二重トリガー防止）
         self._b_handled_cooldown: int = 0
 
+        # B点クロッシング検出用（直前タイマー実行時の再生位置 ms）
+        self._prev_timer_ms: int | None = None
+
         # 音量状態
         self._volume: int = 80
         self._is_muted: bool = False
@@ -1106,6 +1109,7 @@ class VideoPlayer(QMainWindow):
         current_ms = self.media_player.get_time()
         new_ms = max(0, min(current_ms + ms, length_ms))
         self.media_player.set_time(new_ms)
+        self._prev_timer_ms = new_ms  # シーク後は新しい位置を B点クロッシング検出の基点にする
 
     def _on_seek(self, value):
         if self.media_player.get_length() > 0:
@@ -1115,6 +1119,7 @@ class VideoPlayer(QMainWindow):
         """シークバークリック/ドラッグによる再生位置更新（FR-001, FR-001b）。"""
         if self.media_player.get_length() > 0:
             self.media_player.set_time(ms)
+            self._prev_timer_ms = ms  # シーク後は新しい位置を B点クロッシング検出の基点にする
 
     def _on_timer(self):
         length_ms = self.media_player.get_length()
@@ -1164,7 +1169,15 @@ class VideoPlayer(QMainWindow):
         if self.ab_loop_active and self.ab_point_a is not None and self.ab_point_b is not None:
             if length_ms > 0:
                 current_ms = int(pos * length_ms)
-                if current_ms >= self.ab_point_b:
+                # B点クロッシング検出: prev < B ≤ current の「またぎ」でのみトリガー
+                # _prev_timer_ms が None（初回タイマー）は「前回位置不明＝0扱い」として通常どおりトリガー
+                # シークバークリックで B点以降に移動した場合は _prev_timer_ms >= B になるため
+                # 即座に A点へジャンプしない（FR-001）
+                b_crossed = (
+                    (self._prev_timer_ms is None or self._prev_timer_ms < self.ab_point_b)
+                    and current_ms >= self.ab_point_b
+                )
+                if b_crossed:
                     # US4: ポーズ間隔（通常 AB ループの場合は現在選択中ブックマークの pause_ms を使用）
                     pause_ms = 0
                     if self._current_video_path:
@@ -1180,6 +1193,12 @@ class VideoPlayer(QMainWindow):
                                 break
                     self._b_handled_cooldown = 3  # 次の 3 tick（600ms）は B点判定をスキップ
                     self._start_pause_or_seek(self.ab_point_a, pause_ms)
+                self._prev_timer_ms = current_ms
+                return
+
+        # ABループが無効の場合も _prev_timer_ms を更新して次回に備える
+        if length_ms > 0:
+            self._prev_timer_ms = int(pos * length_ms)
 
     def _start_pause_or_seek(self, next_a: int, pause_ms: int) -> None:
         """ポーズ間隔が設定されている場合はポーズタイマーを起動し、そうでなければ即座にシークする。"""
@@ -1996,6 +2015,7 @@ class VideoPlayer(QMainWindow):
         """US4: ポーズ終了後に A 点にシークして再生を再開する。"""
         self._pause_timer = None
         self.media_player.set_time(a_ms)
+        self._prev_timer_ms = a_ms  # A点バウンス後のクロッシング基点をリセット（FR-003）
         self.media_player.play()
         self._update_play_btn_appearance(playing=True)
 

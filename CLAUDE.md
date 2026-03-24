@@ -80,6 +80,7 @@ pytest tests/unit/ -v   # ユニットテストのみ
 - N/A（UI 変更のみ、データファイル変更なし） (023-button-icons)
 - N/A（データファイル変更なし） (024-seekbar-zoom-position)
 - `~/.looplayer/settings.json`（`bookmark_panel_visible` フィールド、変更なし） (025-ui-display-fixes)
+- N/A（新規データ永続化なし） (026-seekbar-click-seek)
 
 ## Recent Changes
 - 012-player-improvements: Added Python 3.12.13 + PyQt6 6.10.2、python-vlc 3.0.21203、ffmpeg（US10 のトランスコード用、既存）
