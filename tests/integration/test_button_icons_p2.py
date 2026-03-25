@@ -1,4 +1,4 @@
-"""023-button-icons: US2 ABループボタンのアイコン化テスト。
+"""023-button-icons + 027-minor-fixes: US2 ABループボタンのアイコン化テスト。
 
 対象ボタン: set_a_btn, set_b_btn, ab_toggle_btn, ab_reset_btn
 検証内容:
@@ -11,6 +11,7 @@
 """
 import pytest
 from pytestqt.qtbot import QtBot
+from PyQt6.QtWidgets import QStyle
 
 from looplayer.bookmark_store import BookmarkStore
 from looplayer.player import VideoPlayer
@@ -85,3 +86,45 @@ class TestAbResetBtnIcon:
     def test_ab_reset_btn_has_tooltip(self, player):
         """ABリセットボタンにツールチップが設定されている（FR-010）。"""
         assert player.ab_reset_btn.toolTip() != ""
+
+
+# ── 027: B点アイコン対称性テスト ──────────────────────────────────────────────
+
+
+class TestSetBBtnIconSymmetry:
+    """_apply_btn_icon に渡された StandardPixmap 引数を記録してアイコンを検証する。
+
+    QIcon.cacheKey() は呼び出しごとに新規オブジェクトが生成されるため cacheKey
+    による直接比較が不安定。代わりに初期化時の引数をスパイで記録する方式を採用。
+    """
+
+    @pytest.fixture
+    def player_with_icon_spy(self, tmp_path, qapp):
+        """_apply_btn_icon の呼び出し引数を記録する専用 player fixture。"""
+        from unittest.mock import patch
+        store = BookmarkStore(storage_path=tmp_path / "bookmarks.json")
+        icon_calls: dict = {}
+        original = VideoPlayer._apply_btn_icon
+
+        def spy(self_player, btn, sp):
+            icon_calls[id(btn)] = sp
+            original(self_player, btn, sp)
+
+        with patch.object(VideoPlayer, "_apply_btn_icon", spy):
+            widget = VideoPlayer(store=store)
+
+        yield widget, icon_calls
+        widget.timer.stop()
+        widget._size_poll_timer.stop()
+        widget.media_player.stop()
+
+    def test_set_b_btn_icon_matches_sp_media_skip_forward(self, player_with_icon_spy):
+        """B点セットボタンのアイコンが SP_MediaSkipForward であること（FR-002）。"""
+        widget, icon_calls = player_with_icon_spy
+        assert icon_calls.get(id(widget.set_b_btn)) == QStyle.StandardPixmap.SP_MediaSkipForward
+
+    def test_set_a_and_b_icons_are_symmetric_pair(self, player_with_icon_spy):
+        """A点は SP_MediaSkipBackward、B点は SP_MediaSkipForward で左右対称のペアになること（FR-002）。"""
+        widget, icon_calls = player_with_icon_spy
+        assert icon_calls.get(id(widget.set_a_btn)) == QStyle.StandardPixmap.SP_MediaSkipBackward
+        assert icon_calls.get(id(widget.set_b_btn)) == QStyle.StandardPixmap.SP_MediaSkipForward
