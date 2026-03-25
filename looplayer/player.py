@@ -284,7 +284,7 @@ class VideoPlayer(QMainWindow):
         self._apply_btn_icon(self.stop_btn, QStyle.StandardPixmap.SP_MediaStop)
         # P2: ABループボタン
         self._apply_btn_icon(self.set_a_btn, QStyle.StandardPixmap.SP_MediaSkipBackward)
-        self._apply_btn_icon(self.set_b_btn, QStyle.StandardPixmap.SP_FileDialogEnd)
+        self._apply_btn_icon(self.set_b_btn, QStyle.StandardPixmap.SP_MediaSkipForward)
         self._apply_btn_icon(self.ab_toggle_btn, QStyle.StandardPixmap.SP_BrowserReload)
         self._apply_btn_icon(self.ab_reset_btn, QStyle.StandardPixmap.SP_DialogResetButton)
         # P3: その他ボタン

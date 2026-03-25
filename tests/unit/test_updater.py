@@ -190,7 +190,7 @@ def _make_settings_mock(last_ts: float = 0.0, etag: str = "") -> MagicMock:
 
 
 def test_update_checker_skips_when_checked_recently(qtbot):
-    """前回チェックから 24h 未満の場合は API を叩かずに up_to_date を発行する。"""
+    """前回チェックから 6h 未満の場合は API を叩かずに up_to_date を発行する。"""
     import time
     settings = _make_settings_mock(last_ts=time.time())  # 今チェック済み
     with patch("looplayer.updater.urllib.request.urlopen") as mock_urlopen:
@@ -262,3 +262,39 @@ def test_update_checker_saves_etag_on_200(qtbot):
         checker.wait()
 
     assert settings.update_check_etag == '"new-etag"'
+
+
+# ── 027: キャッシュ期間 6h テスト ────────────────────────────────────────────
+
+
+def test_check_interval_is_6h():
+    """_CHECK_INTERVAL_SECS が 6時間（21600 秒）であること（FR-001）。"""
+    from looplayer.updater import _CHECK_INTERVAL_SECS
+    assert _CHECK_INTERVAL_SECS == 21600
+
+
+def test_update_checker_skips_within_6h(qtbot):
+    """前回チェックから 5時間以内の場合は API を叩かずに up_to_date を発行する（FR-001）。"""
+    import time
+    settings = _make_settings_mock(last_ts=time.time() - 5 * 3600)  # 5時間前
+    with patch("looplayer.updater.urllib.request.urlopen") as mock_urlopen:
+        checker = UpdateChecker("1.0.0", settings=settings)
+        with qtbot.waitSignal(checker.up_to_date, timeout=5000):
+            checker.start()
+        checker.wait()
+    mock_urlopen.assert_not_called()
+
+
+def test_update_checker_runs_after_6h(qtbot):
+    """前回チェックから 7時間経過した場合は GitHub API を呼び出す（FR-001）。"""
+    import time
+    api_response = {"tag_name": "v1.0.0", "assets": []}
+    settings = _make_settings_mock(last_ts=time.time() - 7 * 3600)  # 7時間前
+
+    with patch("looplayer.updater.urllib.request.urlopen",
+               _make_urlopen_mock(api_response)) as mock_urlopen:
+        checker = UpdateChecker("1.0.0", settings=settings)
+        with qtbot.waitSignal(checker.up_to_date, timeout=5000):
+            checker.start()
+        checker.wait()
+    mock_urlopen.assert_called_once()

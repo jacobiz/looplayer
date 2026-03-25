@@ -19,7 +19,7 @@ from looplayer.i18n import t
 
 _API_URL = "https://api.github.com/repos/jacobiz/looplayer/releases/latest"
 _TIMEOUT = 5  # 秒
-_CHECK_INTERVAL_SECS = 86400  # 24時間キャッシュ
+_CHECK_INTERVAL_SECS = 21600  # 6時間キャッシュ
 
 
 # ── バージョン比較 ────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ class UpdateChecker(QThread):
         self._settings = settings  # AppSettings | None
 
     def run(self) -> None:
-        # 24h キャッシュ: 前回チェックから _CHECK_INTERVAL_SECS 未満なら API を叩かない
+        # 6h キャッシュ: 前回チェックから _CHECK_INTERVAL_SECS 未満なら API を叩かない
         if self._settings is not None:
             elapsed = time.time() - self._settings.last_update_check_ts
             if elapsed < _CHECK_INTERVAL_SECS:
